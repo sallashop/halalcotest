@@ -79,6 +79,19 @@ export const translations = {
     back: 'رجوع',
     piNetwork: 'Pi Network',
 
+    // مفاتيح جديدة تمت إضافتها
+    emptyCartTitle: 'سلة التسوق فارغة',
+    emptyCartMsg: 'لم تقم بإضافة أي منتجات إلى سلة التسوق حتى الآن',
+    orderSummary: 'ملخص الطلب',
+    fillRequiredFields: 'يرجى ملء جميع الحقول المطلوبة',
+    paymentCancelled: 'تم إلغاء الدفع',
+    processing: 'جاري المعالجة...',
+    fullName: 'الاسم بالكامل',
+    detailedAddress: 'العنوان التفصيلي',
+    additionalNotes: 'أي ملاحظات إضافية للتوصيل...',
+    piSdkNotAvailable: 'Pi SDK غير متاح',
+    orderFrom: 'طلب من Halalco',
+
     // Admin
     adminDashboard: 'لوحة تحكم المدير',
     manageProducts: 'إدارة المنتجات',
@@ -189,6 +202,20 @@ export const translations = {
     back: 'Back',
     piNetwork: 'Pi Network',
 
+    // Newly added keys
+    emptyCartTitle: 'Cart is Empty',
+    emptyCartMsg: 'You have not added any items to your cart yet',
+    orderSummary: 'Order Summary',
+    fillRequiredFields: 'Please fill all required fields',
+    paymentCancelled: 'Payment cancelled',
+    processing: 'Processing...',
+    fullName: 'Full Name',
+    detailedAddress: 'Detailed Address',
+    additionalNotes: 'Any additional delivery notes...',
+    piSdkNotAvailable: 'Pi SDK is not available',
+    orderFrom: 'Order from Halalco',
+
+    // Admin
     adminDashboard: 'Admin Dashboard',
     manageProducts: 'Manage Products',
     manageOrders: 'Manage Orders',
