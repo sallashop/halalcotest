@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Plus, Pencil, Trash2, ChevronDown, LayoutDashboard, DollarSign, AlertTriangle } from 'lucide-react';
+import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,7 +19,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
-import { useEffect } from 'react';
 
 type ProductForm = {
   name_ar: string; name_en: string;
@@ -29,19 +28,20 @@ type ProductForm = {
   in_stock: boolean;
 };
 
+type CategoryForm = {
+  name_ar: string; name_en: string;
+  image_url: string; sort_order: number;
+};
+
 const emptyProduct: ProductForm = {
   name_ar: '', name_en: '', description_ar: '', description_en: '',
   price: 0, image_url: '', category: 'vegetables',
   unit_ar: 'كيلو', unit_en: 'kg', in_stock: true,
 };
 
-const categories = [
-  { id: 'vegetables', ar: 'خضروات', en: 'Vegetables' },
-  { id: 'fruits', ar: 'فواكه', en: 'Fruits' },
-  { id: 'grains', ar: 'حبوب', en: 'Grains' },
-  { id: 'herbs', ar: 'أعشاب', en: 'Herbs' },
-  { id: 'dairy', ar: 'ألبان', en: 'Dairy' },
-];
+const emptyCategory: CategoryForm = {
+  name_ar: '', name_en: '', image_url: '', sort_order: 0,
+};
 
 const statusColors: Record<string, string> = {
   pending: 'bg-accent/20 text-accent-foreground',
@@ -61,6 +61,11 @@ const Admin = () => {
   const [editingProduct, setEditingProduct] = useState<Tables<'products'> | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyProduct);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteType, setDeleteType] = useState<'product' | 'category'>('product');
+
+  const [categoryDialog, setCategoryDialog] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Tables<'categories'> | null>(null);
+  const [catForm, setCatForm] = useState<CategoryForm>(emptyCategory);
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login', { replace: true });
@@ -84,6 +89,16 @@ const Admin = () => {
     },
   });
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ['admin-categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('categories').select('*').order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Product mutations
   const saveMutation = useMutation({
     mutationFn: async (data: ProductForm & { id?: string }) => {
       if (data.id) {
@@ -117,6 +132,41 @@ const Admin = () => {
     },
   });
 
+  // Category mutations
+  const saveCategoryMutation = useMutation({
+    mutationFn: async (data: CategoryForm & { id?: string }) => {
+      if (data.id) {
+        const { error } = await supabase.from('categories').update(data).eq('id', data.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('categories').insert(data);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      setCategoryDialog(false);
+      setEditingCategory(null);
+      setCatForm(emptyCategory);
+      toast.success(t('success'));
+    },
+    onError: () => toast.error(t('error')),
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      setDeleteId(null);
+      toast.success(t('success'));
+    },
+  });
+
   const updateOrderStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const { error } = await supabase.from('orders').update({ status }).eq('id', id);
@@ -140,15 +190,30 @@ const Admin = () => {
     setProductDialog(true);
   };
 
-  const openAdd = () => {
-    setEditingProduct(null);
-    setForm(emptyProduct);
-    setProductDialog(true);
-  };
+  const openAdd = () => { setEditingProduct(null); setForm(emptyProduct); setProductDialog(true); };
 
   const handleSave = () => {
     if (!form.name_ar || !form.name_en) { toast.error(language === 'ar' ? 'أدخل اسم المنتج' : 'Enter product name'); return; }
     saveMutation.mutate(editingProduct ? { ...form, id: editingProduct.id } : form);
+  };
+
+  const openEditCategory = (c: Tables<'categories'>) => {
+    setEditingCategory(c);
+    setCatForm({ name_ar: c.name_ar, name_en: c.name_en, image_url: c.image_url || '', sort_order: c.sort_order || 0 });
+    setCategoryDialog(true);
+  };
+
+  const openAddCategory = () => { setEditingCategory(null); setCatForm(emptyCategory); setCategoryDialog(true); };
+
+  const handleSaveCategory = () => {
+    if (!catForm.name_ar || !catForm.name_en) { toast.error(language === 'ar' ? 'أدخل اسم القسم' : 'Enter category name'); return; }
+    saveCategoryMutation.mutate(editingCategory ? { ...catForm, id: editingCategory.id } : catForm);
+  };
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    if (deleteType === 'category') deleteCategoryMutation.mutate(deleteId);
+    else deleteMutation.mutate(deleteId);
   };
 
   const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
@@ -187,6 +252,7 @@ const Admin = () => {
         <Tabs defaultValue="products">
           <TabsList className="bg-muted mb-6">
             <TabsTrigger value="products">{t('manageProducts')}</TabsTrigger>
+            <TabsTrigger value="categories">{t('manageCategories')}</TabsTrigger>
             <TabsTrigger value="orders">{t('manageOrders')}</TabsTrigger>
           </TabsList>
 
@@ -210,7 +276,38 @@ const Admin = () => {
                       {p.in_stock ? (language === 'ar' ? 'متوفر' : 'In Stock') : t('outOfStock')}
                     </Badge>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(p)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setDeleteId(p.id)}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => { setDeleteType('product'); setDeleteId(p.id); }}><Trash2 className="h-4 w-4" /></Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Categories Tab */}
+          <TabsContent value="categories">
+            <div className="flex justify-end mb-4">
+              <Button onClick={openAddCategory} className="bg-primary text-primary-foreground">
+                <Plus className="h-4 w-4 me-1" />{t('addCategory')}
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {categories.map(cat => (
+                <Card key={cat.id} className="border-border/50 bg-card overflow-hidden">
+                  <div className="relative aspect-video">
+                    <img src={cat.image_url || '/placeholder.svg'} alt={cat.name_ar} className="h-full w-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 to-transparent" />
+                    <div className="absolute bottom-0 start-0 end-0 p-3">
+                      <h3 className="font-bold text-primary-foreground">{language === 'ar' ? cat.name_ar : cat.name_en}</h3>
+                    </div>
+                  </div>
+                  <CardContent className="p-3 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {language === 'ar' ? `ترتيب: ${cat.sort_order}` : `Order: ${cat.sort_order}`}
+                    </span>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEditCategory(cat)}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => { setDeleteType('category'); setDeleteId(cat.id); }}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -293,7 +390,7 @@ const Admin = () => {
               <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{language === 'ar' ? c.ar : c.en}</SelectItem>)}
+                  {categories.map(c => <SelectItem key={c.id} value={c.name_en.toLowerCase()}>{language === 'ar' ? c.name_ar : c.name_en}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -321,6 +418,40 @@ const Admin = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Category Dialog */}
+      <Dialog open={categoryDialog} onOpenChange={setCategoryDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingCategory ? t('editCategory') : t('addCategory')}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label className="text-xs">{t('categoryName')} (عربي)</Label>
+              <Input value={catForm.name_ar} onChange={e => setCatForm(f => ({ ...f, name_ar: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">{t('categoryName')} (EN)</Label>
+              <Input value={catForm.name_en} onChange={e => setCatForm(f => ({ ...f, name_en: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">{t('categoryImage')}</Label>
+              <Input value={catForm.image_url} onChange={e => setCatForm(f => ({ ...f, image_url: e.target.value }))} className="mt-1" placeholder="https://..." />
+              {catForm.image_url && (
+                <img src={catForm.image_url} alt="preview" className="mt-2 h-24 w-full rounded-lg object-cover" />
+              )}
+            </div>
+            <div>
+              <Label className="text-xs">{language === 'ar' ? 'الترتيب' : 'Sort Order'}</Label>
+              <Input type="number" value={catForm.sort_order} onChange={e => setCatForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))} className="mt-1" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCategoryDialog(false)}>{t('cancel')}</Button>
+            <Button onClick={handleSaveCategory} disabled={saveCategoryMutation.isPending} className="bg-primary text-primary-foreground">{t('save')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirm */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent className="max-w-sm">
@@ -332,7 +463,7 @@ const Admin = () => {
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDeleteId(null)}>{t('no')}</Button>
-            <Button variant="destructive" onClick={() => deleteId && deleteMutation.mutate(deleteId)}>{t('yes')}</Button>
+            <Button variant="destructive" onClick={handleDelete}>{t('yes')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
