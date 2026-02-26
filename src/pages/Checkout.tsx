@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, MapPin, Phone, User as UserIcon } from 'lucide-react';
+import { CreditCard, MapPin, Phone, User as UserIcon, ShoppingBag, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,6 +13,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 
 interface ShippingForm {
   name: string;
@@ -108,64 +109,139 @@ const Checkout = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      <main className="flex-1 container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-foreground mb-6">{t('checkout')}</h1>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <main className="flex-1 container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        
+        <div className="flex items-center gap-3 mb-8">
+           <div className="flex h-12 w-12 items-center justify-center rounded-[1.5rem] bg-primary/10 shadow-inner shrink-0">
+             <CreditCard className="h-6 w-6 text-primary" strokeWidth={2.5} />
+           </div>
+           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{t('checkout')}</h1>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2">
-            <Card className="border-border/50 bg-card">
-              <CardContent className="p-6">
-                <h2 className="font-bold text-foreground mb-4 flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" />{t('shippingInfo')}
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm text-foreground">{t('name')} *</Label>
-                    <div className="relative mt-1">
-                      <UserIcon className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input value={form.name} onChange={e => updateField('name', e.target.value)} className="ps-9 bg-background border-border" />
+            
+            {/* Shipping Info Card - Soft UI */}
+            <Card className="border-0 shadow-lg shadow-black/5 bg-card rounded-[2rem] overflow-hidden">
+              <CardHeader className="bg-muted/10 border-b border-border/10 pb-5">
+                <CardTitle className="font-bold text-foreground flex items-center gap-3 text-xl">
+                  <div className="p-2 bg-primary/10 rounded-xl shadow-inner text-primary">
+                    <MapPin className="h-5 w-5" strokeWidth={2.5} />
+                  </div>
+                  {t('shippingInfo')}
+                </CardTitle>
+              </CardHeader>
+              
+              <CardContent className="p-5 sm:p-6 pt-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-foreground">{t('name')} *</Label>
+                    <div className="relative">
+                      <UserIcon className="absolute start-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        value={form.name} 
+                        onChange={e => updateField('name', e.target.value)} 
+                        className="ps-11 h-12 rounded-xl bg-muted/30 border-0 shadow-inner focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors" 
+                        placeholder={language === 'ar' ? 'الاسم بالكامل' : 'Full Name'}
+                      />
                     </div>
                   </div>
-                  <div>
-                    <Label className="text-sm text-foreground">{t('phone')} *</Label>
-                    <div className="relative mt-1">
-                      <Phone className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input value={form.phone} onChange={e => updateField('phone', e.target.value)} className="ps-9 bg-background border-border" />
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-foreground">{t('phone')} *</Label>
+                    <div className="relative">
+                      <Phone className="absolute start-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        value={form.phone} 
+                        onChange={e => updateField('phone', e.target.value)} 
+                        className="ps-11 h-12 rounded-xl bg-muted/30 border-0 shadow-inner focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors" 
+                        dir="ltr"
+                        placeholder="+00000000000"
+                      />
                     </div>
                   </div>
-                  <div className="sm:col-span-2">
-                    <Label className="text-sm text-foreground">{t('address')} *</Label>
-                    <Input value={form.address} onChange={e => updateField('address', e.target.value)} className="mt-1 bg-background border-border" />
+                  
+                  <div className="sm:col-span-2 space-y-2">
+                    <Label className="text-sm font-bold text-foreground">{t('address')} *</Label>
+                    <Input 
+                      value={form.address} 
+                      onChange={e => updateField('address', e.target.value)} 
+                      className="h-12 rounded-xl bg-muted/30 border-0 shadow-inner focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors" 
+                      placeholder={language === 'ar' ? 'العنوان التفصيلي' : 'Detailed Address'}
+                    />
                   </div>
-                  <div>
-                    <Label className="text-sm text-foreground">{t('city')} *</Label>
-                    <Input value={form.city} onChange={e => updateField('city', e.target.value)} className="mt-1 bg-background border-border" />
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-foreground">{t('city')} *</Label>
+                    <Input 
+                      value={form.city} 
+                      onChange={e => updateField('city', e.target.value)} 
+                      className="h-12 rounded-xl bg-muted/30 border-0 shadow-inner focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors" 
+                      placeholder={language === 'ar' ? 'المدينة' : 'City'}
+                    />
                   </div>
-                  <div>
-                    <Label className="text-sm text-foreground">{t('notes')}</Label>
-                    <Textarea value={form.notes} onChange={e => updateField('notes', e.target.value)} className="mt-1 bg-background border-border resize-none" rows={2} />
+                  
+                  <div className="sm:col-span-2 space-y-2">
+                    <Label className="text-sm font-bold text-foreground">{t('notes')}</Label>
+                    <Textarea 
+                      value={form.notes} 
+                      onChange={e => updateField('notes', e.target.value)} 
+                      className="min-h-[100px] rounded-xl bg-muted/30 border-0 shadow-inner focus-visible:ring-2 focus-visible:ring-primary/20 transition-colors resize-none" 
+                      placeholder={language === 'ar' ? 'أي ملاحظات إضافية للتوصيل...' : 'Any additional delivery notes...'}
+                    />
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
+
           <div>
-            <Card className="border-border/50 bg-card sticky top-20">
-              <CardContent className="p-6">
-                <h2 className="font-bold text-foreground mb-4">{language === 'ar' ? 'ملخص الطلب' : 'Order Summary'}</h2>
-                <div className="space-y-2 mb-4">
+            <Card className="border-0 shadow-xl shadow-black/5 bg-card rounded-[2rem] sticky top-24 overflow-hidden">
+              <div className="bg-muted/10 p-5 border-b border-border/10">
+                <h2 className="text-lg font-bold text-foreground flex items-center gap-3">
+                   <div className="p-2 bg-primary/10 rounded-xl shadow-inner text-primary">
+                     <ShoppingBag className="h-5 w-5" strokeWidth={2.5} />
+                   </div>
+                   {language === 'ar' ? 'ملخص الطلب' : 'Order Summary'}
+                </h2>
+              </div>
+              
+              <CardContent className="p-5 sm:p-6">
+                <div className="bg-muted/20 rounded-[1.5rem] p-4 shadow-inner space-y-3 mb-6 border-0 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20">
                   {items.map(item => (
-                    <div key={item.product.id} className="flex justify-between text-sm text-muted-foreground">
-                      <span className="truncate flex-1">{getName(item.product)} × {item.quantity}</span>
-                      <span className="shrink-0 ms-2">{(item.product.price * item.quantity).toFixed(4)} π</span>
+                    <div key={item.product.id} className="flex justify-between items-center text-sm text-muted-foreground font-medium">
+                      <span className="truncate pr-4 leading-relaxed flex-1">
+                        {getName(item.product)} <span className="font-bold text-foreground">× {item.quantity}</span>
+                      </span>
+                      <span className="shrink-0 font-bold text-foreground" dir="ltr">{(item.product.price * item.quantity).toFixed(4)} π</span>
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-border pt-3 flex justify-between items-center mb-6">
-                  <span className="font-bold text-foreground">{t('total')}</span>
-                  <span className="font-bold text-primary text-lg">{total.toFixed(4)} π</span>
+                
+                <div className="bg-primary/5 p-4 rounded-[1.5rem] shadow-sm border-0 mb-6 flex justify-between items-center">
+                  <span className="font-bold text-foreground text-base">{t('total')}</span>
+                  <div dir="ltr" className="flex items-baseline gap-1">
+                    <span className="font-black text-primary text-xl">{total.toFixed(4)}</span>
+                    <span className="font-bold text-primary/80 text-sm">π</span>
+                  </div>
                 </div>
-                <Button onClick={handlePayWithPi} disabled={isProcessing} className="w-full h-12 gradient-primary text-primary-foreground font-semibold text-base rounded-xl hover:opacity-90 transition-opacity">
-                  {isProcessing ? <span className="animate-spin h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full" /> : <><CreditCard className="h-5 w-5 me-2" />{t('payWithPi')}</>}
+                
+                <Button 
+                  onClick={handlePayWithPi} 
+                  disabled={isProcessing} 
+                  className="w-full h-14 gap-2 gradient-pi shadow-lg shadow-primary/20 text-primary-foreground font-bold text-base sm:text-lg rounded-2xl transition-transform hover:-translate-y-0.5 active:scale-95 border-0"
+                >
+                  {isProcessing ? (
+                    <span className="flex items-center gap-2">
+                       <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2.5} />
+                       {language === 'ar' ? 'جاري المعالجة...' : 'Processing...'}
+                    </span>
+                  ) : (
+                    <>
+                      <CreditCard className="h-5 w-5" strokeWidth={2.5} />
+                      {t('payWithPi')}
+                    </>
+                  )}
                 </Button>
               </CardContent>
             </Card>
