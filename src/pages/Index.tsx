@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Leaf, Truck, Shield, Sprout } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Leaf, Truck, Shield, Sprout, TrendingUp, TrendingDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/contexts/LanguageContext';
 import Navbar from '@/components/layout/Navbar';
@@ -28,11 +28,36 @@ const Index = () => {
     },
   });
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: piPrice } = useQuery({
+    queryKey: ['pi-price'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('pi-price');
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 60000,
+  });
+
   const features = [
     { icon: Sprout, title: t('freshProducts'), desc: t('freshDesc') },
     { icon: Shield, title: t('securePayment'), desc: t('secureDesc') },
     { icon: Truck, title: t('fastDelivery'), desc: t('fastDesc') },
   ];
+
+  const priceChange = piPrice?.change24h ?? 0;
+  const isUp = priceChange >= 0;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -71,7 +96,33 @@ const Index = () => {
         </div>
       </section>
 
-      <section className="container mx-auto px-4 -mt-12 relative z-10">
+      {/* Pi Price Ticker */}
+      {piPrice?.price && (
+        <section className="container mx-auto px-4 -mt-16 relative z-20 mb-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="rounded-2xl bg-card p-4 card-shadow border border-border/50 flex items-center justify-between flex-wrap gap-3"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">π</div>
+              <div>
+                <p className="text-xs text-muted-foreground">{t('piPrice')}</p>
+                <p className="text-lg font-bold text-foreground">${piPrice.price.toFixed(4)}</p>
+              </div>
+            </div>
+            <div className={`flex items-center gap-1 text-sm font-semibold ${isUp ? 'text-primary' : 'text-destructive'}`}>
+              {isUp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+              {piPrice.changePercent}%
+            </div>
+            <div className="text-xs text-muted-foreground">
+              H: ${piPrice.high24h?.toFixed(4)} • L: ${piPrice.low24h?.toFixed(4)}
+            </div>
+          </motion.div>
+        </section>
+      )}
+
+      <section className={`container mx-auto px-4 ${piPrice?.price ? '-mt-2' : '-mt-12'} relative z-10`}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {features.map((f, i) => (
             <motion.div
@@ -92,6 +143,40 @@ const Index = () => {
           ))}
         </div>
       </section>
+
+      {/* Categories Section */}
+      {categories.length > 0 && (
+        <section className="container mx-auto px-4 py-12">
+          <h2 className="text-2xl font-bold text-foreground mb-6">{t('categories')}</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {categories.map((cat, i) => (
+              <motion.div
+                key={cat.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 * i }}
+              >
+                <Link to={`/products?category=${cat.name_en.toLowerCase()}`}>
+                  <div className="relative group rounded-2xl overflow-hidden aspect-square card-shadow border border-border/50 cursor-pointer">
+                    <img
+                      src={cat.image_url || '/placeholder.svg'}
+                      alt={language === 'ar' ? cat.name_ar : cat.name_en}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-foreground/70 to-transparent" />
+                    <div className="absolute bottom-0 start-0 end-0 p-4">
+                      <h3 className="font-bold text-primary-foreground text-lg">
+                        {language === 'ar' ? cat.name_ar : cat.name_en}
+                      </h3>
+                    </div>
+                  </div>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="container mx-auto px-4 py-16">
         <div className="flex items-center justify-between mb-8">

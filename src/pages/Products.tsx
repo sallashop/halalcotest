@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -9,19 +10,12 @@ import Footer from '@/components/layout/Footer';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-const categories = [
-  { id: 'all', name: { ar: 'الكل', en: 'All' } },
-  { id: 'vegetables', name: { ar: 'خضروات', en: 'Vegetables' } },
-  { id: 'fruits', name: { ar: 'فواكه', en: 'Fruits' } },
-  { id: 'grains', name: { ar: 'حبوب', en: 'Grains' } },
-  { id: 'herbs', name: { ar: 'أعشاب', en: 'Herbs' } },
-  { id: 'dairy', name: { ar: 'ألبان', en: 'Dairy' } },
-];
-
 const Products = () => {
   const { t, language } = useLanguage();
+  const [searchParams] = useSearchParams();
+  const categoryFromUrl = searchParams.get('category') || 'all';
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeCategory, setActiveCategory] = useState(categoryFromUrl);
 
   const { data: products = [] } = useQuery({
     queryKey: ['products'],
@@ -31,6 +25,24 @@ const Products = () => {
       return data;
     },
   });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const categoryTabs = useMemo(() => {
+    const tabs = [{ id: 'all', name_ar: 'الكل', name_en: 'All' }];
+    categories.forEach(c => tabs.push({ id: c.name_en.toLowerCase(), name_ar: c.name_ar, name_en: c.name_en }));
+    return tabs;
+  }, [categories]);
 
   const filtered = useMemo(() => {
     return products.filter(p => {
@@ -54,7 +66,7 @@ const Products = () => {
           </div>
         </div>
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {categories.map(cat => (
+          {categoryTabs.map(cat => (
             <Button
               key={cat.id}
               variant={activeCategory === cat.id ? 'default' : 'outline'}
@@ -64,7 +76,7 @@ const Products = () => {
                 ? 'bg-primary text-primary-foreground hover:bg-primary/90 shrink-0'
                 : 'border-border text-muted-foreground hover:text-foreground shrink-0'}
             >
-              {cat.name[language]}
+              {language === 'ar' ? cat.name_ar : cat.name_en}
             </Button>
           ))}
         </div>
