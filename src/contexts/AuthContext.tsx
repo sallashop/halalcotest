@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode } fr
 import { User } from '@/types';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { supabase } from '@/integrations/supabase/client';
 
 declare global {
   interface Window {
@@ -67,6 +68,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
       setUser(newUser);
       localStorage.setItem('gh_user', JSON.stringify(newUser));
+
+      // Upsert profile in database
+      try {
+        await supabase.from('profiles').upsert({
+          user_id: auth.user.uid,
+          pi_uid: auth.user.uid,
+          username: auth.user.username || 'Pioneer',
+        }, { onConflict: 'pi_uid' });
+      } catch (e) {
+        console.error('Profile upsert error:', e);
+      }
       toast.success(t('welcome'));
       return true;
     } catch (error: any) {
