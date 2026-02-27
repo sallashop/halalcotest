@@ -72,7 +72,9 @@ const Admin = () => {
   const [editingCategory, setEditingCategory] = useState<Tables<'categories'> | null>(null);
   const [catForm, setCatForm] = useState<CategoryForm>(emptyCategory);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const catFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadingCatImage, setUploadingCatImage] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login', { replace: true });
@@ -252,6 +254,27 @@ const Admin = () => {
   };
 
   const openAddCategory = () => { setEditingCategory(null); setCatForm(emptyCategory); setCategoryDialog(true); };
+
+  const handleCatImageUpload = async (files: FileList | null) => {
+    if (!files || !files[0]) return;
+    const file = files[0];
+    if (file.size > MAX_IMAGE_SIZE) {
+      toast.error(language === 'ar' ? 'حجم الصورة يجب أن يكون أقل من 30KB' : 'Image must be under 30KB');
+      return;
+    }
+    setUploadingCatImage(true);
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from('category-images').upload(path, file);
+    if (error) {
+      toast.error(language === 'ar' ? 'خطأ في رفع الصورة' : 'Upload error');
+      setUploadingCatImage(false);
+      return;
+    }
+    const { data: urlData } = supabase.storage.from('category-images').getPublicUrl(path);
+    setCatForm(f => ({ ...f, image_url: urlData.publicUrl }));
+    setUploadingCatImage(false);
+  };
 
   const handleSaveCategory = () => {
     if (!catForm.name_ar || !catForm.name_en) { toast.error(language === 'ar' ? 'أدخل اسم القسم' : 'Enter category name'); return; }
@@ -512,10 +535,31 @@ const Admin = () => {
             </div>
             <div>
               <Label className="text-xs">{t('categoryImage')}</Label>
-              <Input value={catForm.image_url} onChange={e => setCatForm(f => ({ ...f, image_url: e.target.value }))} className="mt-1" placeholder="https://..." />
-              {catForm.image_url && (
-                <img src={catForm.image_url} alt="preview" className="mt-2 h-24 w-full rounded-lg object-cover" />
-              )}
+              <div className="mt-1 flex items-center gap-3">
+                {catForm.image_url ? (
+                  <div className="relative h-20 w-20 rounded-lg overflow-hidden border border-border">
+                    <img src={catForm.image_url} alt="preview" className="h-full w-full object-cover" />
+                    <button onClick={() => setCatForm(f => ({ ...f, image_url: '' }))} className="absolute top-0 end-0 bg-destructive text-destructive-foreground rounded-bl-lg p-0.5">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => catFileInputRef.current?.click()}
+                    disabled={uploadingCatImage}
+                    className="h-20 w-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center hover:border-primary transition-colors"
+                  >
+                    {uploadingCatImage ? (
+                      <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                    ) : (
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                    )}
+                  </button>
+                )}
+              </div>
+              <input ref={catFileInputRef} type="file" accept="image/*" className="hidden" onChange={e => handleCatImageUpload(e.target.files)} />
+              <p className="text-xs text-muted-foreground mt-1">{language === 'ar' ? 'الحد الأقصى 30 كيلوبايت' : 'Max 30KB'}</p>
             </div>
             <div>
               <Label className="text-xs">{language === 'ar' ? 'الترتيب' : 'Sort Order'}</Label>
