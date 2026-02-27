@@ -1,4 +1,5 @@
 import { ShoppingCart, Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -14,6 +15,7 @@ interface ProductCardProps {
 const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   const { t, language } = useLanguage();
   const { addItem } = useCart();
+  const navigate = useNavigate();
 
   const name = language === 'ar' ? product.name_ar : product.name_en;
   const description = language === 'ar' ? (product.description_ar || '') : (product.description_en || '');
@@ -26,7 +28,10 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
       style={{ animationDelay: `${index * 50}ms` }}
     >
       {/* Soft UI Card */}
-      <Card className="group overflow-hidden border-0 bg-card shadow-sm hover:shadow-lg transition-all duration-300 rounded-[1.5rem] flex flex-col h-full">
+      <Card 
+        className="group overflow-hidden border-0 bg-card shadow-sm hover:shadow-lg transition-all duration-300 rounded-[1.5rem] flex flex-col h-full cursor-pointer"
+        onClick={() => navigate(`/product/${product.id}`)}
+      >
         
         {/* Image Area */}
         <div className="relative aspect-[4/3] overflow-hidden bg-muted/20 shrink-0">
@@ -83,7 +88,10 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
             {/* Add to Cart Button - Full width for perfect mobile UX */}
             <Button
               disabled={!product.in_stock}
-              onClick={() => addItem(product)}
+              onClick={(e) => { 
+                e.stopPropagation(); // يمنع الانتقال لصفحة المنتج عند الضغط على زر الإضافة للسلة
+                addItem(product); 
+              }}
               className={cn(
                 "w-full h-11 gap-2 rounded-xl text-xs sm:text-sm font-bold shadow-sm transition-all active:scale-[0.98] border-0",
                 product.in_stock 
