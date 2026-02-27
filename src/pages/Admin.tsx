@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3 } from 'lucide-react';
+import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -26,7 +26,11 @@ type ProductForm = {
   price: number; image_url: string;
   category: string; unit_ar: string; unit_en: string;
   in_stock: boolean;
+  images: string[];
 };
+
+const MAX_IMAGE_SIZE = 30 * 1024; // 30KB
+const MAX_IMAGES = 3;
 
 type CategoryForm = {
   name_ar: string; name_en: string;
@@ -37,6 +41,7 @@ const emptyProduct: ProductForm = {
   name_ar: '', name_en: '', description_ar: '', description_en: '',
   price: 0, image_url: '', category: 'vegetables',
   unit_ar: 'كيلو', unit_en: 'kg', in_stock: true,
+  images: [],
 };
 
 const emptyCategory: CategoryForm = {
@@ -66,6 +71,8 @@ const Admin = () => {
   const [categoryDialog, setCategoryDialog] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Tables<'categories'> | null>(null);
   const [catForm, setCatForm] = useState<CategoryForm>(emptyCategory);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login', { replace: true });
@@ -186,15 +193,56 @@ const Admin = () => {
       price: p.price, image_url: p.image_url || '',
       category: p.category, unit_ar: p.unit_ar || 'كيلو', unit_en: p.unit_en || 'kg',
       in_stock: p.in_stock ?? true,
+      images: (p as any).images || [],
     });
     setProductDialog(true);
   };
 
   const openAdd = () => { setEditingProduct(null); setForm(emptyProduct); setProductDialog(true); };
 
+  const handleImageUpload = async (files: FileList | null) => {
+    if (!files) return;
+    const currentCount = form.images.length;
+    const remaining = MAX_IMAGES - currentCount;
+    if (remaining <= 0) {
+      toast.error(language === 'ar' ? `الحد الأقصى ${MAX_IMAGES} صور` : `Maximum ${MAX_IMAGES} images`);
+      return;
+    }
+    setUploadingImages(true);
+    const newImages: string[] = [];
+    for (let i = 0; i < Math.min(files.length, remaining); i++) {
+      const file = files[i];
+      if (file.size > MAX_IMAGE_SIZE) {
+        toast.error(language === 'ar' ? `${file.name}: حجم الصورة يجب أن يكون أقل من 30KB` : `${file.name}: Image must be under 30KB`);
+        continue;
+      }
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from('product-images').upload(path, file);
+      if (error) {
+        console.error('Upload error:', error);
+        toast.error(language === 'ar' ? 'خطأ في رفع الصورة' : 'Upload error');
+        continue;
+      }
+      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+      newImages.push(urlData.publicUrl);
+    }
+    setForm(f => ({ ...f, images: [...f.images, ...newImages] }));
+    setUploadingImages(false);
+  };
+
+  const removeImage = (index: number) => {
+    setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
+  };
+
   const handleSave = () => {
     if (!form.name_ar || !form.name_en) { toast.error(language === 'ar' ? 'أدخل اسم المنتج' : 'Enter product name'); return; }
-    saveMutation.mutate(editingProduct ? { ...form, id: editingProduct.id } : form);
+    // Set first uploaded image as main image_url if not set
+    const finalForm = { ...form };
+    if (!finalForm.image_url && finalForm.images.length > 0) {
+      finalForm.image_url = finalForm.images[0];
+    }
+    saveMutation.mutate(editingProduct ? { ...finalForm, id: editingProduct.id } : finalForm);
   };
 
   const openEditCategory = (c: Tables<'categories'>) => {
@@ -395,7 +443,36 @@ const Admin = () => {
               </Select>
             </div>
             <div className="sm:col-span-2">
-              <Label className="text-xs">{language === 'ar' ? 'رابط الصورة' : 'Image URL'}</Label>
+              <Label className="text-xs">{language === 'ar' ? 'صور المنتج' : 'Product Images'} ({form.images.length}/{MAX_IMAGES})</Label>
+              <p className="text-xs text-muted-foreground mb-2">{language === 'ar' ? 'الحد الأقصى 30 كيلوبايت لكل صورة' : 'Max 30KB per image'}</p>
+              <div className="flex gap-2 flex-wrap mb-2">
+                {form.images.map((img, i) => (
+                  <div key={i} className="relative h-16 w-16 rounded-lg overflow-hidden border border-border">
+                    <img src={img} alt="" className="h-full w-full object-cover" />
+                    <button onClick={() => removeImage(i)} className="absolute top-0 end-0 bg-destructive text-destructive-foreground rounded-bl-lg p-0.5">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                {form.images.length < MAX_IMAGES && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingImages}
+                    className="h-16 w-16 rounded-lg border-2 border-dashed border-border flex items-center justify-center hover:border-primary transition-colors"
+                  >
+                    {uploadingImages ? (
+                      <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                    ) : (
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                    )}
+                  </button>
+                )}
+              </div>
+              <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleImageUpload(e.target.files)} />
+            </div>
+            <div className="sm:col-span-2">
+              <Label className="text-xs">{language === 'ar' ? 'رابط الصورة الرئيسية (اختياري)' : 'Main Image URL (optional)'}</Label>
               <Input value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))} className="mt-1" placeholder="https://..." />
             </div>
             <div>
