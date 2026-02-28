@@ -12,7 +12,11 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export const LanguageProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<Language>(() => {
-    return (localStorage.getItem('language') as Language) || 'ar';
+    const saved = localStorage.getItem('language') as Language;
+    if (saved) return saved;
+    // Auto-detect from browser language
+    const browserLang = navigator.language || (navigator as any).userLanguage || '';
+    return browserLang.startsWith('ar') ? 'ar' : 'en';
   });
 
   const setLanguage = useCallback((lang: Language) => {
