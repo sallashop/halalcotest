@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { paymentId, userId, items, shipping, total } = await req.json();
+    const { paymentId, userId, items, shipping, total, pi_price_at_order } = await req.json();
 
     if (!paymentId || !userId || !items || !shipping || total == null) {
       return new Response(
@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
         shipping_address: shipping.address,
         shipping_city: shipping.city,
         shipping_notes: shipping.notes || "",
+        pi_price_at_order: pi_price_at_order || null,
       })
       .select()
       .single();
