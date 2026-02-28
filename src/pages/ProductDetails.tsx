@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, ShoppingCart, Star, Minus, Plus, Package } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ShoppingCart, Star, Minus, Plus, Package, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import PriceDisplay from '@/components/products/PriceDisplay';
 
 const ProductDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -60,6 +61,8 @@ const ProductDetails = () => {
   const name = language === 'ar' ? product.name_ar : product.name_en;
   const description = language === 'ar' ? (product.description_ar || '') : (product.description_en || '');
   const unit = language === 'ar' ? (product.unit_ar || 'كيلو') : (product.unit_en || 'kg');
+  const priceType = (product as any).price_type || 'fixed';
+  const priceUsd = (product as any).price_usd || 0;
 
   // Build images array: main image + extra images
   const images: string[] = [];
@@ -130,7 +133,7 @@ const ProductDetails = () => {
             </div>
 
             <div className="text-3xl font-bold text-primary mb-1">
-              {product.price} {t('piCurrency')}
+              <PriceDisplay priceType={priceType} priceFixed={product.price} priceUsd={priceUsd} />
             </div>
             <p className="text-sm text-muted-foreground mb-6">/ {unit}</p>
 

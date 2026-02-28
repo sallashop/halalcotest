@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X } from 'lucide-react';
+import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X, Truck, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/layout/Navbar';
@@ -23,13 +24,15 @@ import { toast } from 'sonner';
 type ProductForm = {
   name_ar: string; name_en: string;
   description_ar: string; description_en: string;
-  price: number; image_url: string;
+  price: number; price_type: string; price_usd: number;
+  image_url: string;
   category: string; unit_ar: string; unit_en: string;
   in_stock: boolean;
   images: string[];
+  shipping_category_id: string | null;
 };
 
-const MAX_IMAGE_SIZE = 30 * 1024; // 30KB
+const MAX_IMAGE_SIZE = 30 * 1024;
 const MAX_IMAGES = 3;
 
 type CategoryForm = {
@@ -37,15 +40,25 @@ type CategoryForm = {
   image_url: string; sort_order: number;
 };
 
+type ShippingCatForm = {
+  name_ar: string; name_en: string;
+  price_usd: number;
+};
+
 const emptyProduct: ProductForm = {
   name_ar: '', name_en: '', description_ar: '', description_en: '',
-  price: 0, image_url: '', category: 'vegetables',
+  price: 0, price_type: 'fixed', price_usd: 0,
+  image_url: '', category: 'vegetables',
   unit_ar: 'كيلو', unit_en: 'kg', in_stock: true,
-  images: [],
+  images: [], shipping_category_id: null,
 };
 
 const emptyCategory: CategoryForm = {
   name_ar: '', name_en: '', image_url: '', sort_order: 0,
+};
+
+const emptyShippingCat: ShippingCatForm = {
+  name_ar: '', name_en: '', price_usd: 0,
 };
 
 const statusColors: Record<string, string> = {
@@ -61,16 +74,22 @@ const Admin = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const isAr = language === 'ar';
 
   const [productDialog, setProductDialog] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Tables<'products'> | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyProduct);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [deleteType, setDeleteType] = useState<'product' | 'category'>('product');
+  const [deleteType, setDeleteType] = useState<'product' | 'category' | 'shipping'>('product');
 
   const [categoryDialog, setCategoryDialog] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Tables<'categories'> | null>(null);
   const [catForm, setCatForm] = useState<CategoryForm>(emptyCategory);
+
+  const [shippingDialog, setShippingDialog] = useState(false);
+  const [editingShipping, setEditingShipping] = useState<any>(null);
+  const [shipForm, setShipForm] = useState<ShippingCatForm>(emptyShippingCat);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const catFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -107,14 +126,24 @@ const Admin = () => {
     },
   });
 
+  const { data: shippingCategories = [] } = useQuery({
+    queryKey: ['shipping-categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('shipping_categories').select('*').order('created_at', { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Product mutations
   const saveMutation = useMutation({
-    mutationFn: async (data: ProductForm & { id?: string }) => {
-      if (data.id) {
-        const { error } = await supabase.from('products').update(data).eq('id', data.id);
+    mutationFn: async (data: any) => {
+      const { id, ...rest } = data;
+      if (id) {
+        const { error } = await supabase.from('products').update(rest).eq('id', id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('products').insert(data);
+        const { error } = await supabase.from('products').insert(rest);
         if (error) throw error;
       }
     },
@@ -176,6 +205,39 @@ const Admin = () => {
     },
   });
 
+  // Shipping category mutations
+  const saveShippingMutation = useMutation({
+    mutationFn: async (data: ShippingCatForm & { id?: string }) => {
+      if (data.id) {
+        const { error } = await supabase.from('shipping_categories').update(data).eq('id', data.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('shipping_categories').insert(data);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shipping-categories'] });
+      setShippingDialog(false);
+      setEditingShipping(null);
+      setShipForm(emptyShippingCat);
+      toast.success(t('success'));
+    },
+    onError: () => toast.error(t('error')),
+  });
+
+  const deleteShippingMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('shipping_categories').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shipping-categories'] });
+      setDeleteId(null);
+      toast.success(t('success'));
+    },
+  });
+
   const updateOrderStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const { error } = await supabase.from('orders').update({ status }).eq('id', id);
@@ -192,10 +254,12 @@ const Admin = () => {
     setForm({
       name_ar: p.name_ar, name_en: p.name_en,
       description_ar: p.description_ar || '', description_en: p.description_en || '',
-      price: p.price, image_url: p.image_url || '',
+      price: p.price, price_type: (p as any).price_type || 'fixed', price_usd: (p as any).price_usd || 0,
+      image_url: p.image_url || '',
       category: p.category, unit_ar: p.unit_ar || 'كيلو', unit_en: p.unit_en || 'kg',
       in_stock: p.in_stock ?? true,
       images: (p as any).images || [],
+      shipping_category_id: (p as any).shipping_category_id || null,
     });
     setProductDialog(true);
   };
@@ -207,7 +271,7 @@ const Admin = () => {
     const currentCount = form.images.length;
     const remaining = MAX_IMAGES - currentCount;
     if (remaining <= 0) {
-      toast.error(language === 'ar' ? `الحد الأقصى ${MAX_IMAGES} صور` : `Maximum ${MAX_IMAGES} images`);
+      toast.error(isAr ? `الحد الأقصى ${MAX_IMAGES} صور` : `Maximum ${MAX_IMAGES} images`);
       return;
     }
     setUploadingImages(true);
@@ -215,17 +279,13 @@ const Admin = () => {
     for (let i = 0; i < Math.min(files.length, remaining); i++) {
       const file = files[i];
       if (file.size > MAX_IMAGE_SIZE) {
-        toast.error(language === 'ar' ? `${file.name}: حجم الصورة يجب أن يكون أقل من 30KB` : `${file.name}: Image must be under 30KB`);
+        toast.error(isAr ? `${file.name}: حجم الصورة يجب أن يكون أقل من 30KB` : `${file.name}: Image must be under 30KB`);
         continue;
       }
       const ext = file.name.split('.').pop() || 'jpg';
       const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error } = await supabase.storage.from('product-images').upload(path, file);
-      if (error) {
-        console.error('Upload error:', error);
-        toast.error(language === 'ar' ? 'خطأ في رفع الصورة' : 'Upload error');
-        continue;
-      }
+      if (error) { toast.error(isAr ? 'خطأ في رفع الصورة' : 'Upload error'); continue; }
       const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
       newImages.push(urlData.publicUrl);
     }
@@ -238,13 +298,14 @@ const Admin = () => {
   };
 
   const handleSave = () => {
-    if (!form.name_ar || !form.name_en) { toast.error(language === 'ar' ? 'أدخل اسم المنتج' : 'Enter product name'); return; }
-    // Set first uploaded image as main image_url if not set
-    const finalForm = { ...form };
+    if (!form.name_ar || !form.name_en) { toast.error(isAr ? 'أدخل اسم المنتج' : 'Enter product name'); return; }
+    const finalForm: any = { ...form };
     if (!finalForm.image_url && finalForm.images.length > 0) {
       finalForm.image_url = finalForm.images[0];
     }
-    saveMutation.mutate(editingProduct ? { ...finalForm, id: editingProduct.id } : finalForm);
+    if (finalForm.shipping_category_id === '') finalForm.shipping_category_id = null;
+    if (editingProduct) finalForm.id = editingProduct.id;
+    saveMutation.mutate(finalForm);
   };
 
   const openEditCategory = (c: Tables<'categories'>) => {
@@ -259,7 +320,7 @@ const Admin = () => {
     if (!files || !files[0]) return;
     const file = files[0];
     if (file.size > MAX_IMAGE_SIZE) {
-      toast.error(language === 'ar' ? 'حجم الصورة يجب أن يكون أقل من 30KB' : 'Image must be under 30KB');
+      toast.error(isAr ? 'حجم الصورة يجب أن يكون أقل من 30KB' : 'Image must be under 30KB');
       return;
     }
     setUploadingCatImage(true);
@@ -267,7 +328,7 @@ const Admin = () => {
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await supabase.storage.from('category-images').upload(path, file);
     if (error) {
-      toast.error(language === 'ar' ? 'خطأ في رفع الصورة' : 'Upload error');
+      toast.error(isAr ? 'خطأ في رفع الصورة' : 'Upload error');
       setUploadingCatImage(false);
       return;
     }
@@ -277,13 +338,14 @@ const Admin = () => {
   };
 
   const handleSaveCategory = () => {
-    if (!catForm.name_ar || !catForm.name_en) { toast.error(language === 'ar' ? 'أدخل اسم القسم' : 'Enter category name'); return; }
+    if (!catForm.name_ar || !catForm.name_en) { toast.error(isAr ? 'أدخل اسم القسم' : 'Enter category name'); return; }
     saveCategoryMutation.mutate(editingCategory ? { ...catForm, id: editingCategory.id } : catForm);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
     if (deleteType === 'category') deleteCategoryMutation.mutate(deleteId);
+    else if (deleteType === 'shipping') deleteShippingMutation.mutate(deleteId);
     else deleteMutation.mutate(deleteId);
   };
 
@@ -321,9 +383,10 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="products">
-          <TabsList className="bg-muted mb-6">
+          <TabsList className="bg-muted mb-6 flex-wrap">
             <TabsTrigger value="products">{t('manageProducts')}</TabsTrigger>
             <TabsTrigger value="categories">{t('manageCategories')}</TabsTrigger>
+            <TabsTrigger value="shipping">{isAr ? 'فئات الشحن' : 'Shipping'}</TabsTrigger>
             <TabsTrigger value="orders">{t('manageOrders')}</TabsTrigger>
           </TabsList>
 
@@ -340,11 +403,14 @@ const Admin = () => {
                   <CardContent className="flex items-center gap-4 p-4">
                     <img src={p.image_url || '/placeholder.svg'} alt={p.name_ar} className="h-14 w-14 rounded-lg object-cover shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-foreground text-sm truncate">{language === 'ar' ? p.name_ar : p.name_en}</h3>
-                      <p className="text-xs text-muted-foreground">{p.price} π • {p.category}</p>
+                      <h3 className="font-semibold text-foreground text-sm truncate">{isAr ? p.name_ar : p.name_en}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {(p as any).price_type === 'variable' ? `$${(p as any).price_usd}` : `${p.price} π`} • {p.category}
+                        {(p as any).price_type === 'variable' && <Badge variant="outline" className="ms-2 text-[10px] border-accent/30 text-accent-foreground">{isAr ? 'متغير' : 'Variable'}</Badge>}
+                      </p>
                     </div>
                     <Badge variant={p.in_stock ? 'default' : 'destructive'} className={p.in_stock ? 'bg-primary/10 text-primary' : ''}>
-                      {p.in_stock ? (language === 'ar' ? 'متوفر' : 'In Stock') : t('outOfStock')}
+                      {p.in_stock ? (isAr ? 'متوفر' : 'In Stock') : t('outOfStock')}
                     </Badge>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(p)}><Pencil className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-destructive" onClick={() => { setDeleteType('product'); setDeleteId(p.id); }}><Trash2 className="h-4 w-4" /></Button>
@@ -368,13 +434,11 @@ const Admin = () => {
                     <img src={cat.image_url || '/placeholder.svg'} alt={cat.name_ar} className="h-full w-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 to-transparent" />
                     <div className="absolute bottom-0 start-0 end-0 p-3">
-                      <h3 className="font-bold text-primary-foreground">{language === 'ar' ? cat.name_ar : cat.name_en}</h3>
+                      <h3 className="font-bold text-primary-foreground">{isAr ? cat.name_ar : cat.name_en}</h3>
                     </div>
                   </div>
                   <CardContent className="p-3 flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                      {language === 'ar' ? `ترتيب: ${cat.sort_order}` : `Order: ${cat.sort_order}`}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{isAr ? `ترتيب: ${cat.sort_order}` : `Order: ${cat.sort_order}`}</span>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => openEditCategory(cat)}><Pencil className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" className="text-destructive" onClick={() => { setDeleteType('category'); setDeleteId(cat.id); }}><Trash2 className="h-4 w-4" /></Button>
@@ -382,6 +446,39 @@ const Admin = () => {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          </TabsContent>
+
+          {/* Shipping Tab */}
+          <TabsContent value="shipping">
+            <div className="flex justify-end mb-4">
+              <Button onClick={() => { setEditingShipping(null); setShipForm(emptyShippingCat); setShippingDialog(true); }} className="bg-primary text-primary-foreground">
+                <Plus className="h-4 w-4 me-1" />{isAr ? 'إضافة فئة شحن' : 'Add Shipping Category'}
+              </Button>
+            </div>
+            <div className="grid gap-3">
+              {shippingCategories.map((sc: any) => (
+                <Card key={sc.id} className="border-border/50 bg-card">
+                  <CardContent className="flex items-center gap-4 p-4">
+                    <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Truck className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground text-sm">{isAr ? sc.name_ar : sc.name_en}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {sc.price_usd === 0
+                          ? (isAr ? 'شحن مجاني' : 'Free shipping')
+                          : `$${sc.price_usd} USD`}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => { setEditingShipping(sc); setShipForm({ name_ar: sc.name_ar, name_en: sc.name_en, price_usd: sc.price_usd }); setShippingDialog(true); }}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => { setDeleteType('shipping'); setDeleteId(sc.id); }}><Trash2 className="h-4 w-4" /></Button>
+                  </CardContent>
+                </Card>
+              ))}
+              {shippingCategories.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">{isAr ? 'لا توجد فئات شحن بعد' : 'No shipping categories yet'}</p>
+              )}
             </div>
           </TabsContent>
 
@@ -397,7 +494,7 @@ const Admin = () => {
                       <div className="flex items-center justify-between mb-2">
                         <div>
                           <p className="text-sm font-semibold text-foreground">#{order.id.slice(0, 8)}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(order.created_at!).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(order.created_at!).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge className={statusColors[order.status] || ''}>{t(order.status as any)}</Badge>
@@ -445,29 +542,90 @@ const Admin = () => {
               <Input value={form.name_en} onChange={e => setForm(f => ({ ...f, name_en: e.target.value }))} className="mt-1" />
             </div>
             <div className="sm:col-span-2">
-              <Label className="text-xs">{language === 'ar' ? 'الوصف (عربي)' : 'Description (AR)'}</Label>
+              <Label className="text-xs">{isAr ? 'الوصف (عربي)' : 'Description (AR)'}</Label>
               <Textarea value={form.description_ar} onChange={e => setForm(f => ({ ...f, description_ar: e.target.value }))} className="mt-1" rows={2} />
             </div>
             <div className="sm:col-span-2">
-              <Label className="text-xs">{language === 'ar' ? 'الوصف (EN)' : 'Description (EN)'}</Label>
+              <Label className="text-xs">{isAr ? 'الوصف (EN)' : 'Description (EN)'}</Label>
               <Textarea value={form.description_en} onChange={e => setForm(f => ({ ...f, description_en: e.target.value }))} className="mt-1" rows={2} />
             </div>
-            <div>
-              <Label className="text-xs">{t('productPrice')} (π)</Label>
-              <Input type="number" step="0.0001" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="mt-1" />
+
+            {/* Price Type */}
+            <div className="sm:col-span-2">
+              <Label className="text-xs mb-2 block">{isAr ? 'نوع السعر' : 'Price Type'}</Label>
+              <div className="flex gap-3">
+                <Button
+                  type="button" variant={form.price_type === 'fixed' ? 'default' : 'outline'} size="sm"
+                  onClick={() => setForm(f => ({ ...f, price_type: 'fixed' }))}
+                  className={form.price_type === 'fixed' ? 'bg-primary text-primary-foreground' : ''}
+                >
+                  {isAr ? 'سعر ثابت (π)' : 'Fixed (π)'}
+                </Button>
+                <Button
+                  type="button" variant={form.price_type === 'variable' ? 'default' : 'outline'} size="sm"
+                  onClick={() => setForm(f => ({ ...f, price_type: 'variable' }))}
+                  className={form.price_type === 'variable' ? 'bg-primary text-primary-foreground' : ''}
+                >
+                  {isAr ? 'سعر متغير ($)' : 'Variable ($)'}
+                </Button>
+              </div>
             </div>
+
+            {form.price_type === 'fixed' ? (
+              <div className="sm:col-span-2">
+                <Label className="text-xs">{t('productPrice')} (π)</Label>
+                <Input type="number" step="0.0001" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="mt-1" />
+              </div>
+            ) : (
+              <div className="sm:col-span-2">
+                <Label className="text-xs flex items-center gap-1">
+                  {isAr ? 'السعر بالدولار ($)' : 'Price in USD ($)'}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs">
+                      {isAr
+                        ? 'أدخل تكلفة المنتج بالدولار. سيتم قسمتها على سعر Pi الحالي لعرض السعر بعملة Pi تلقائياً. السعر يتغير مع تغير سعر Pi.'
+                        : 'Enter the product cost in USD. It will be divided by the current Pi price to display the price in Pi automatically. Price updates as Pi price changes.'}
+                    </TooltipContent>
+                  </Tooltip>
+                </Label>
+                <Input type="number" step="0.01" value={form.price_usd} onChange={e => setForm(f => ({ ...f, price_usd: parseFloat(e.target.value) || 0 }))} className="mt-1" placeholder="e.g. 5.00" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isAr ? 'السعر المعروض = تكلفة الدولار ÷ سعر Pi الحالي' : 'Displayed price = USD cost ÷ current Pi price'}
+                </p>
+              </div>
+            )}
+
             <div>
               <Label className="text-xs">{t('productCategory')}</Label>
               <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {categories.map(c => <SelectItem key={c.id} value={c.name_en.toLowerCase()}>{language === 'ar' ? c.name_ar : c.name_en}</SelectItem>)}
+                  {categories.map(c => <SelectItem key={c.id} value={c.name_en.toLowerCase()}>{isAr ? c.name_ar : c.name_en}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+
+            <div>
+              <Label className="text-xs">{isAr ? 'فئة الشحن' : 'Shipping Category'}</Label>
+              <Select value={form.shipping_category_id || 'none'} onValueChange={v => setForm(f => ({ ...f, shipping_category_id: v === 'none' ? null : v }))}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{isAr ? 'بدون شحن' : 'No shipping'}</SelectItem>
+                  {shippingCategories.map((sc: any) => (
+                    <SelectItem key={sc.id} value={sc.id}>
+                      {isAr ? sc.name_ar : sc.name_en} {sc.price_usd === 0 ? (isAr ? '(مجاني)' : '(Free)') : `($${sc.price_usd})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="sm:col-span-2">
-              <Label className="text-xs">{language === 'ar' ? 'صور المنتج' : 'Product Images'} ({form.images.length}/{MAX_IMAGES})</Label>
-              <p className="text-xs text-muted-foreground mb-2">{language === 'ar' ? 'الحد الأقصى 30 كيلوبايت لكل صورة' : 'Max 30KB per image'}</p>
+              <Label className="text-xs">{isAr ? 'صور المنتج' : 'Product Images'} ({form.images.length}/{MAX_IMAGES})</Label>
+              <p className="text-xs text-muted-foreground mb-2">{isAr ? 'الحد الأقصى 30 كيلوبايت لكل صورة' : 'Max 30KB per image'}</p>
               <div className="flex gap-2 flex-wrap mb-2">
                 {form.images.map((img, i) => (
                   <div key={i} className="relative h-16 w-16 rounded-lg overflow-hidden border border-border">
@@ -495,20 +653,20 @@ const Admin = () => {
               <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleImageUpload(e.target.files)} />
             </div>
             <div className="sm:col-span-2">
-              <Label className="text-xs">{language === 'ar' ? 'رابط الصورة الرئيسية (اختياري)' : 'Main Image URL (optional)'}</Label>
+              <Label className="text-xs">{isAr ? 'رابط الصورة الرئيسية (اختياري)' : 'Main Image URL (optional)'}</Label>
               <Input value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))} className="mt-1" placeholder="https://..." />
             </div>
             <div>
-              <Label className="text-xs">{language === 'ar' ? 'الوحدة (عربي)' : 'Unit (AR)'}</Label>
+              <Label className="text-xs">{isAr ? 'الوحدة (عربي)' : 'Unit (AR)'}</Label>
               <Input value={form.unit_ar} onChange={e => setForm(f => ({ ...f, unit_ar: e.target.value }))} className="mt-1" />
             </div>
             <div>
-              <Label className="text-xs">{language === 'ar' ? 'الوحدة (EN)' : 'Unit (EN)'}</Label>
+              <Label className="text-xs">{isAr ? 'الوحدة (EN)' : 'Unit (EN)'}</Label>
               <Input value={form.unit_en} onChange={e => setForm(f => ({ ...f, unit_en: e.target.value }))} className="mt-1" />
             </div>
             <div className="flex items-center gap-2 sm:col-span-2">
               <Switch checked={form.in_stock} onCheckedChange={v => setForm(f => ({ ...f, in_stock: v }))} />
-              <Label className="text-sm">{language === 'ar' ? 'متوفر' : 'In Stock'}</Label>
+              <Label className="text-sm">{isAr ? 'متوفر' : 'In Stock'}</Label>
             </div>
           </div>
           <DialogFooter className="gap-2">
@@ -559,16 +717,61 @@ const Admin = () => {
                 )}
               </div>
               <input ref={catFileInputRef} type="file" accept="image/*" className="hidden" onChange={e => handleCatImageUpload(e.target.files)} />
-              <p className="text-xs text-muted-foreground mt-1">{language === 'ar' ? 'الحد الأقصى 30 كيلوبايت' : 'Max 30KB'}</p>
+              <p className="text-xs text-muted-foreground mt-1">{isAr ? 'الحد الأقصى 30 كيلوبايت' : 'Max 30KB'}</p>
             </div>
             <div>
-              <Label className="text-xs">{language === 'ar' ? 'الترتيب' : 'Sort Order'}</Label>
+              <Label className="text-xs">{isAr ? 'الترتيب' : 'Sort Order'}</Label>
               <Input type="number" value={catForm.sort_order} onChange={e => setCatForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))} className="mt-1" />
             </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setCategoryDialog(false)}>{t('cancel')}</Button>
             <Button onClick={handleSaveCategory} disabled={saveCategoryMutation.isPending} className="bg-primary text-primary-foreground">{t('save')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shipping Category Dialog */}
+      <Dialog open={shippingDialog} onOpenChange={setShippingDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingShipping ? (isAr ? 'تعديل فئة الشحن' : 'Edit Shipping Category') : (isAr ? 'إضافة فئة شحن' : 'Add Shipping Category')}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label className="text-xs">{isAr ? 'اسم الفئة (عربي)' : 'Category Name (AR)'}</Label>
+              <Input value={shipForm.name_ar} onChange={e => setShipForm(f => ({ ...f, name_ar: e.target.value }))} className="mt-1" placeholder={isAr ? 'مثال: شحن عادي' : 'e.g. Standard shipping'} />
+            </div>
+            <div>
+              <Label className="text-xs">{isAr ? 'اسم الفئة (EN)' : 'Category Name (EN)'}</Label>
+              <Input value={shipForm.name_en} onChange={e => setShipForm(f => ({ ...f, name_en: e.target.value }))} className="mt-1" placeholder="e.g. Standard shipping" />
+            </div>
+            <div>
+              <Label className="text-xs flex items-center gap-1">
+                {isAr ? 'تكلفة الشحن ($)' : 'Shipping Cost ($)'}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    {isAr ? 'أدخل 0 للشحن المجاني. التكلفة بالدولار تُقسم على سعر Pi لعرضها بعملة Pi.' : 'Enter 0 for free shipping. USD cost is divided by Pi price to display in Pi.'}
+                  </TooltipContent>
+                </Tooltip>
+              </Label>
+              <Input type="number" step="0.01" value={shipForm.price_usd} onChange={e => setShipForm(f => ({ ...f, price_usd: parseFloat(e.target.value) || 0 }))} className="mt-1" />
+              {shipForm.price_usd === 0 && <p className="text-xs text-primary mt-1">{isAr ? '✓ شحن مجاني' : '✓ Free shipping'}</p>}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShippingDialog(false)}>{t('cancel')}</Button>
+            <Button
+              onClick={() => {
+                if (!shipForm.name_ar || !shipForm.name_en) { toast.error(isAr ? 'أدخل اسم الفئة' : 'Enter category name'); return; }
+                saveShippingMutation.mutate(editingShipping ? { ...shipForm, id: editingShipping.id } : shipForm);
+              }}
+              disabled={saveShippingMutation.isPending}
+              className="bg-primary text-primary-foreground"
+            >{t('save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
