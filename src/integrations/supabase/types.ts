@@ -91,6 +91,7 @@ export type Database = {
           created_at: string | null
           id: string
           pi_payment_id: string | null
+          pi_price_at_order: number | null
           pi_txid: string | null
           shipping_address: string | null
           shipping_city: string | null
@@ -106,6 +107,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           pi_payment_id?: string | null
+          pi_price_at_order?: number | null
           pi_txid?: string | null
           shipping_address?: string | null
           shipping_city?: string | null
@@ -121,6 +123,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           pi_payment_id?: string | null
+          pi_price_at_order?: number | null
           pi_txid?: string | null
           shipping_address?: string | null
           shipping_city?: string | null
@@ -147,7 +150,10 @@ export type Database = {
           name_ar: string
           name_en: string
           price: number
+          price_type: string
+          price_usd: number | null
           rating: number | null
+          shipping_category_id: string | null
           sold: number | null
           unit_ar: string | null
           unit_en: string | null
@@ -165,7 +171,10 @@ export type Database = {
           name_ar: string
           name_en: string
           price?: number
+          price_type?: string
+          price_usd?: number | null
           rating?: number | null
+          shipping_category_id?: string | null
           sold?: number | null
           unit_ar?: string | null
           unit_en?: string | null
@@ -183,13 +192,24 @@ export type Database = {
           name_ar?: string
           name_en?: string
           price?: number
+          price_type?: string
+          price_usd?: number | null
           rating?: number | null
+          shipping_category_id?: string | null
           sold?: number | null
           unit_ar?: string | null
           unit_en?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_shipping_category_id_fkey"
+            columns: ["shipping_category_id"]
+            isOneToOne: false
+            referencedRelation: "shipping_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -221,6 +241,33 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
           username?: string
+        }
+        Relationships: []
+      }
+      shipping_categories: {
+        Row: {
+          created_at: string | null
+          id: string
+          name_ar: string
+          name_en: string
+          price_usd: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name_ar: string
+          name_en: string
+          price_usd?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name_ar?: string
+          name_en?: string
+          price_usd?: number
+          updated_at?: string | null
         }
         Relationships: []
       }
