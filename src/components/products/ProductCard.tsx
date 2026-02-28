@@ -1,4 +1,4 @@
-import { ShoppingCart, Star } from 'lucide-react';
+import { ShoppingCart, Star, Truck } from 'lucide-react'; // تمت إضافة Truck
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -6,13 +6,15 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
 import { Tables } from '@/integrations/supabase/types';
 import { cn } from '@/lib/utils';
+import PriceDisplay from './PriceDisplay'; // تم استيراد مكون السعر
 
 interface ProductCardProps {
   product: Tables<'products'>;
   index?: number;
+  shippingPrice?: number; // تمت إضافة سعر الشحن
 }
 
-const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
+const ProductCard = ({ product, index = 0, shippingPrice }: ProductCardProps) => {
   const { t, language } = useLanguage();
   const { addItem } = useCart();
   const navigate = useNavigate();
@@ -20,6 +22,10 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
   const name = language === 'ar' ? product.name_ar : product.name_en;
   const description = language === 'ar' ? (product.description_ar || '') : (product.description_en || '');
   const unit = language === 'ar' ? (product.unit_ar || 'كيلو') : (product.unit_en || 'kg');
+
+  // استخراج متغيرات السعر من الكود القديم
+  const priceType = (product as any).price_type || 'fixed';
+  const priceUsd = (product as any).price_usd || 0;
 
   return (
     <div
@@ -51,10 +57,9 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
             </div>
           )}
 
-          {/* Price Badge - Glassmorphism */}
-          <div className="absolute top-3 end-3 rounded-[1rem] bg-background/90 backdrop-blur-md px-3 py-1.5 shadow-sm border border-border/10 flex items-baseline gap-1 z-10">
-            <span className="font-bold text-primary text-sm leading-none">{product.price}</span>
-            <span className="text-[10px] font-bold text-primary/80 leading-none">{t('piCurrency')}</span>
+          {/* Price Badge - Glassmorphism (تم التعديل لاستخدام PriceDisplay) */}
+          <div className="absolute top-3 end-3 rounded-[1rem] bg-background/90 backdrop-blur-md px-3 py-1.5 shadow-sm border border-border/10 flex items-center gap-1 z-10 text-primary font-bold">
+            <PriceDisplay priceType={priceType} priceFixed={product.price} priceUsd={priceUsd} />
           </div>
         </div>
 
@@ -85,7 +90,7 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
               </span>
             </div>
 
-            {/* Add to Cart Button - Full width for perfect mobile UX */}
+            {/* Add to Cart Button */}
             <Button
               disabled={!product.in_stock}
               onClick={(e) => { 
@@ -102,6 +107,17 @@ const ProductCard = ({ product, index = 0 }: ProductCardProps) => {
               <ShoppingCart className="h-4 w-4 shrink-0" strokeWidth={2.5} />
               <span className="truncate">{t('addToCart')}</span>
             </Button>
+
+            {/* Shipping Price Row (تم النقل من الكود القديم مع تحسين المظهر ليناسب التصميم الجديد) */}
+            {shippingPrice !== undefined && (
+              <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/30 py-1.5 rounded-lg">
+                <Truck className="h-3.5 w-3.5" />
+                {shippingPrice === 0
+                  ? (language === 'ar' ? 'شحن مجاني' : 'Free shipping')
+                  : <PriceDisplay priceType="variable" priceFixed={0} priceUsd={shippingPrice} className="text-xs" />
+                }
+              </div>
+            )}
           </div>
 
         </CardContent>
