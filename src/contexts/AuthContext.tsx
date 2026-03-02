@@ -59,26 +59,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setTimeout(() => reject(new Error('timeout')), 15000)
       );
       const auth = await Promise.race([authPromise, timeoutPromise]);
+      // Upsert profile in database
+      let isAdmin = false;
+      try {
+        const { error: upsertError } = await supabase.from('profiles').upsert({
+          user_id: auth.user.uid,
+          pi_uid: auth.user.uid,
+          username: auth.user.username || 'Pioneer',
+        }, { onConflict: 'pi_uid' });
+        if (upsertError) console.error('Profile upsert error:', upsertError);
+
+        // Fetch profile to get admin status
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_admin, balance')
+          .eq('pi_uid', auth.user.uid)
+          .single();
+        if (profile) {
+          isAdmin = profile.is_admin ?? false;
+        }
+      } catch (e) {
+        console.error('Profile error:', e);
+      }
+
       const newUser: User = {
         id: auth.user.uid,
         username: auth.user.username || 'Pioneer',
         piUid: auth.user.uid,
         balance: 0,
         accessToken: auth.accessToken,
+        isAdmin,
       };
       setUser(newUser);
       localStorage.setItem('gh_user', JSON.stringify(newUser));
-
-      // Upsert profile in database
-      try {
-        await supabase.from('profiles').upsert({
-          user_id: auth.user.uid,
-          pi_uid: auth.user.uid,
-          username: auth.user.username || 'Pioneer',
-        }, { onConflict: 'pi_uid' });
-      } catch (e) {
-        console.error('Profile upsert error:', e);
-      }
       toast.success(t('welcome'));
       return true;
     } catch (error: any) {
