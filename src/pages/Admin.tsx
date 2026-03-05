@@ -383,12 +383,14 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="products">
-          <TabsList className="bg-muted mb-6 flex-wrap">
-            <TabsTrigger value="products">{t('manageProducts')}</TabsTrigger>
-            <TabsTrigger value="categories">{t('manageCategories')}</TabsTrigger>
-            <TabsTrigger value="shipping">{isAr ? 'فئات الشحن' : 'Shipping'}</TabsTrigger>
-            <TabsTrigger value="orders">{t('manageOrders')}</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto mb-6 -mx-4 px-4">
+            <TabsList className="bg-muted inline-flex w-auto min-w-full sm:min-w-0 gap-1">
+              <TabsTrigger value="products" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageProducts')}</TabsTrigger>
+              <TabsTrigger value="categories" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageCategories')}</TabsTrigger>
+              <TabsTrigger value="shipping" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'فئات الشحن' : 'Shipping'}</TabsTrigger>
+              <TabsTrigger value="orders" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageOrders')}</TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Products Tab */}
           <TabsContent value="products">
