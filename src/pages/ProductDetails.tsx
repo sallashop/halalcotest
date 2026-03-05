@@ -8,7 +8,7 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import PriceDisplay from '@/components/products/PriceDisplay';
 
@@ -29,6 +29,16 @@ const ProductDetails = () => {
     },
     enabled: !!id,
   });
+
+  // Track recently viewed products
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const viewed: string[] = JSON.parse(localStorage.getItem('recently_viewed') || '[]');
+      const updated = [id, ...viewed.filter(v => v !== id)].slice(0, 20);
+      localStorage.setItem('recently_viewed', JSON.stringify(updated));
+    } catch { /* ignore */ }
+  }, [id]);
 
   if (isLoading) {
     return (
