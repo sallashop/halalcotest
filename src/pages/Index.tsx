@@ -22,10 +22,46 @@ const Index = () => {
         .select('*')
         .eq('in_stock', true)
         .order('sold', { ascending: false })
-        .limit(4);
+        .limit(8);
       if (error) throw error;
       return data;
     },
+  });
+
+  // Get recently viewed product IDs from localStorage
+  const recentlyViewedIds: string[] = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('recently_viewed') || '[]');
+    } catch { return []; }
+  })();
+
+  const { data: suggestedProducts = [] } = useQuery({
+    queryKey: ['suggested-products', recentlyViewedIds],
+    queryFn: async () => {
+      if (recentlyViewedIds.length === 0) return [];
+      // Get categories of recently viewed products
+      const { data: viewedProducts } = await supabase
+        .from('products')
+        .select('category')
+        .in('id', recentlyViewedIds);
+      if (!viewedProducts || viewedProducts.length === 0) return [];
+      const cats = [...new Set(viewedProducts.map(p => p.category))];
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .in('category', cats)
+        .eq('in_stock', true)
+        .limit(20);
+      if (error) throw error;
+      // Exclude already viewed, shuffle, take 6
+      const filtered = (data || []).filter(p => !recentlyViewedIds.includes(p.id));
+      for (let i = filtered.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
+      }
+      return filtered.slice(0, 6);
+    },
+    enabled: recentlyViewedIds.length > 0,
   });
 
   const { data: categories = [] } = useQuery({
@@ -181,7 +217,7 @@ const Index = () => {
       <section className="container mx-auto px-4 py-16">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-2xl font-bold text-foreground">{t('allProducts')}</h2>
+            <h2 className="text-2xl font-bold text-foreground">{language === 'ar' ? 'أحدث المنتجات' : 'Latest Products'}</h2>
             <p className="text-sm text-muted-foreground mt-1">
               {language === 'ar' ? 'أفضل المنتجات الطازجة' : 'Best fresh products'}
             </p>
@@ -199,6 +235,23 @@ const Index = () => {
           ))}
         </div>
       </section>
+
+      {/* Suggested Products */}
+      {suggestedProducts.length > 0 && (
+        <section className="container mx-auto px-4 pb-16">
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-foreground">{language === 'ar' ? 'منتجات تهمك' : 'Products You May Like'}</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {language === 'ar' ? 'بناءً على ما شاهدته مؤخراً' : 'Based on your recent views'}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {suggestedProducts.map((product, i) => (
+              <ProductCard key={product.id} product={product} index={i} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <Footer />
     </div>
