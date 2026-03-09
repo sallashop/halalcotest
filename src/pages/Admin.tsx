@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X, Truck, Info, Tag, MessageCircle, Save, BarChart3 } from 'lucide-react';
+import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X, Truck, Info, Tag, MessageCircle, Save, BarChart3, Users, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 import SalesReports from '@/components/admin/SalesReports';
+import TrackingDialog from '@/components/admin/TrackingDialog';
+import TeamManagement from '@/components/admin/TeamManagement';
 
 type ProductForm = {
   name_ar: string; name_en: string;
@@ -99,6 +101,8 @@ const Admin = () => {
   const [couponForm, setCouponForm] = useState({ code: '', discount_percent: 0, max_uses: 0, description_ar: '', description_en: '', is_active: true, expires_at: '' });
 
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [trackingDialog, setTrackingDialog] = useState(false);
+  const [trackingOrderId, setTrackingOrderId] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const catFileInputRef = useRef<HTMLInputElement>(null);
@@ -258,8 +262,11 @@ const Admin = () => {
   });
 
   const updateOrderStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from('orders').update({ status }).eq('id', id);
+    mutationFn: async ({ id, status, tracking_number, tracking_receipt_url }: { id: string; status: string; tracking_number?: string; tracking_receipt_url?: string }) => {
+      const updateData: any = { status };
+      if (tracking_number !== undefined) updateData.tracking_number = tracking_number;
+      if (tracking_receipt_url !== undefined) updateData.tracking_receipt_url = tracking_receipt_url;
+      const { error } = await supabase.from('orders').update(updateData).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -267,6 +274,26 @@ const Admin = () => {
       toast.success(t('success'));
     },
   });
+
+  const handleStatusChange = (orderId: string, newStatus: string) => {
+    if (newStatus === 'shipped') {
+      setTrackingOrderId(orderId);
+      setTrackingDialog(true);
+    } else {
+      updateOrderStatus.mutate({ id: orderId, status: newStatus });
+    }
+  };
+
+  const handleTrackingSave = (orderId: string, trackingNumber: string, receiptUrl: string) => {
+    updateOrderStatus.mutate({
+      id: orderId,
+      status: 'shipped',
+      tracking_number: trackingNumber,
+      tracking_receipt_url: receiptUrl,
+    });
+    setTrackingDialog(false);
+    setTrackingOrderId('');
+  };
 
   // Coupons
   const { data: coupons = [] } = useQuery({
@@ -482,6 +509,9 @@ const Admin = () => {
                 <BarChart3 className="h-4 w-4 me-1" />{isAr ? 'التقارير' : 'Reports'}
               </TabsTrigger>
               <TabsTrigger value="coupons" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الكوبونات' : 'Coupons'}</TabsTrigger>
+              <TabsTrigger value="team" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">
+                <Users className="h-4 w-4 me-1" />{isAr ? 'الفريق' : 'Team'}
+              </TabsTrigger>
               <TabsTrigger value="settings" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الإعدادات' : 'Settings'}</TabsTrigger>
             </TabsList>
           </div>
@@ -601,7 +631,7 @@ const Admin = () => {
                         <p className="text-xs text-muted-foreground">
                           {order.shipping_name} • {order.shipping_city} • {order.shipping_phone}
                         </p>
-                        <Select value={order.status} onValueChange={(v) => updateOrderStatus.mutate({ id: order.id, status: v })}>
+                        <Select value={order.status} onValueChange={(v) => handleStatusChange(order.id, v)}>
                           <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="pending">{t('pending')}</SelectItem>
@@ -612,6 +642,20 @@ const Admin = () => {
                           </SelectContent>
                         </Select>
                       </div>
+                      {/* Tracking info */}
+                      {(order as any).tracking_number && (
+                        <div className="mt-2 p-2 rounded-lg bg-muted/50 border border-border/50">
+                          <p className="text-xs text-foreground flex items-center gap-1">
+                            <Truck className="h-3 w-3 text-primary" />
+                            {isAr ? 'رقم الشحنة:' : 'Tracking:'} <span dir="ltr" className="font-mono">{(order as any).tracking_number}</span>
+                          </p>
+                          {(order as any).tracking_receipt_url && (
+                            <a href={(order as any).tracking_receipt_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 mt-1">
+                              <Eye className="h-3 w-3" />{isAr ? 'عرض إيصال الشحن' : 'View receipt'}
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -658,6 +702,11 @@ const Admin = () => {
               ))}
               {coupons.length === 0 && <p className="text-center text-muted-foreground py-8">{isAr ? 'لا توجد كوبونات' : 'No coupons yet'}</p>}
             </div>
+          </TabsContent>
+
+          {/* Team Tab */}
+          <TabsContent value="team">
+            <TeamManagement isAr={isAr} />
           </TabsContent>
 
           {/* Settings Tab */}
@@ -1027,6 +1076,16 @@ const Admin = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Tracking Dialog */}
+      <TrackingDialog
+        open={trackingDialog}
+        onOpenChange={setTrackingDialog}
+        orderId={trackingOrderId}
+        isAr={isAr}
+        onSave={handleTrackingSave}
+        isSaving={updateOrderStatus.isPending}
+      />
     </div>
   );
 };
