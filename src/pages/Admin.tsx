@@ -30,6 +30,8 @@ type ProductForm = {
   in_stock: boolean;
   images: string[];
   shipping_category_id: string | null;
+  max_quantity: number;
+  unit_type: string;
 };
 
 const MAX_IMAGE_SIZE = 30 * 1024;
@@ -51,6 +53,7 @@ const emptyProduct: ProductForm = {
   image_url: '', category: 'vegetables',
   unit_ar: 'كيلو', unit_en: 'kg', in_stock: true,
   images: [], shipping_category_id: null,
+  max_quantity: 100, unit_type: 'weight',
 };
 
 const emptyCategory: CategoryForm = {
@@ -260,6 +263,8 @@ const Admin = () => {
       in_stock: p.in_stock ?? true,
       images: (p as any).images || [],
       shipping_category_id: (p as any).shipping_category_id || null,
+      max_quantity: (p as any).max_quantity || 100,
+      unit_type: (p as any).unit_type || 'weight',
     });
     setProductDialog(true);
   };
@@ -665,6 +670,20 @@ const Admin = () => {
             <div>
               <Label className="text-xs">{isAr ? 'الوحدة (EN)' : 'Unit (EN)'}</Label>
               <Input value={form.unit_en} onChange={e => setForm(f => ({ ...f, unit_en: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">{isAr ? 'نوع البيع' : 'Sell Type'}</Label>
+              <Select value={form.unit_type} onValueChange={v => setForm(f => ({ ...f, unit_type: v }))}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weight">{isAr ? 'بالوزن' : 'By Weight'}</SelectItem>
+                  <SelectItem value="piece">{isAr ? 'بالقطعة' : 'By Piece'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">{isAr ? 'الحد الأقصى للكمية' : 'Max Quantity'}</Label>
+              <Input type="number" value={form.max_quantity} onChange={e => setForm(f => ({ ...f, max_quantity: parseInt(e.target.value) || 1 }))} className="mt-1" min={1} />
             </div>
             <div className="flex items-center gap-2 sm:col-span-2">
               <Switch checked={form.in_stock} onCheckedChange={v => setForm(f => ({ ...f, in_stock: v }))} />
