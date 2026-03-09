@@ -36,7 +36,7 @@ const Footer = () => {
           <div>
             <h3 className="font-semibold text-foreground mb-3">{t('contactUs')}</h3>
             <p className="text-sm text-muted-foreground">
-              {isAr ? 'البريد: info@halalco.pi' : 'Email: info@halalco.pi'}
+              {isAr ? 'البريد:' : 'Email:'} <a href="mailto:halal.egy.co@gmail.com" className="hover:text-primary transition-colors">halal.egy.co@gmail.com</a>
             </p>
             <p className="text-sm text-muted-foreground mt-1">
               {isAr ? 'الدعم عبر Pi Network' : 'Support via Pi Network'}
