@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X, Truck, Info, Tag, MessageCircle, Save } from 'lucide-react';
+import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X, Truck, Info, Tag, MessageCircle, Save, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
+import SalesReports from '@/components/admin/SalesReports';
 
 type ProductForm = {
   name_ar: string; name_en: string;
@@ -121,6 +122,15 @@ const Admin = () => {
     queryKey: ['admin-orders'],
     queryFn: async () => {
       const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: orderItems = [] } = useQuery({
+    queryKey: ['admin-order-items'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('order_items').select('*');
       if (error) throw error;
       return data;
     },
@@ -468,6 +478,9 @@ const Admin = () => {
               <TabsTrigger value="categories" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageCategories')}</TabsTrigger>
               <TabsTrigger value="shipping" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الشحن' : 'Shipping'}</TabsTrigger>
               <TabsTrigger value="orders" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageOrders')}</TabsTrigger>
+              <TabsTrigger value="reports" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">
+                <BarChart3 className="h-4 w-4 me-1" />{isAr ? 'التقارير' : 'Reports'}
+              </TabsTrigger>
               <TabsTrigger value="coupons" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الكوبونات' : 'Coupons'}</TabsTrigger>
               <TabsTrigger value="settings" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الإعدادات' : 'Settings'}</TabsTrigger>
             </TabsList>
@@ -604,6 +617,11 @@ const Admin = () => {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          {/* Reports Tab */}
+          <TabsContent value="reports">
+            <SalesReports orders={orders} products={products} orderItems={orderItems as any} />
           </TabsContent>
 
           {/* Coupons Tab */}
