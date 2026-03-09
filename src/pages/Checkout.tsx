@@ -32,11 +32,8 @@ const Checkout = () => {
   const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
   const [form, setForm] = useState<ShippingForm>({ name: '', phone: '', address: '', city: '', notes: '' });
-  
-  // States for Coupons
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
-  
   const isAr = language === 'ar';
 
   const { data: piPriceData } = usePiPrice();
@@ -78,7 +75,6 @@ const Checkout = () => {
     }
   }, [savedAddress]);
 
-  // Mutation to save address
   const saveAddressMutation = useMutation({
     mutationFn: async () => {
       if (!user?.piUid) return;
@@ -105,9 +101,8 @@ const Checkout = () => {
 
   const getName = (p: typeof items[0]['product']) => language === 'ar' ? p.name_ar : p.name_en;
 
-  // Calculate real total with dynamic pricing, shipping, and coupons
   const piPrice = piPriceData?.price || null;
-  
+
   const getItemPiPrice = (item: typeof items[0]) => {
     const priceType = (item.product as any).price_type || 'fixed';
     const priceUsd = (item.product as any).price_usd || 0;
@@ -145,7 +140,7 @@ const Checkout = () => {
       return;
     }
     if (data.max_uses > 0 && data.used_count >= data.max_uses) {
-      toast.error(isAr ? 'الكوبون استنفد الحد الأقصى للاستخدام' : 'Coupon maxed out');
+      toast.error(isAr ? 'الكوبون استنفد' : 'Coupon maxed out');
       return;
     }
     setAppliedCoupon(data);
@@ -157,107 +152,89 @@ const Checkout = () => {
       toast.error(isAr ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
       return;
     }
-    
-    if (grandTotal <= 0) {
-      toast.error(isAr ? 'إجمالي الطلب غير صالح للدفع' : 'Order total is invalid for payment');
-      return;
-    }
-
     if (!window.Pi) {
       toast.error('Pi SDK غير متاح');
       return;
     }
-    
+
+    if (isNaN(grandTotal) || grandTotal <= 0) {
+      toast.error(isAr ? 'خطأ: السعر الإجمالي غير صالح' : 'Error: Invalid total amount');
+      return;
+    }
+
     setIsProcessing(true);
-    
+
     try {
-      // ✅ نستخدم نفس التركيبة التي تعمل 100%، فقط نرسل تفاصيل الكوبون للسيرفر لاحقاً
-      window.Pi.createPayment(
-        {
-          amount: grandTotal,
-          memo: isAr ? 'طلب من Halalco' : 'Order from Halalco',
-          metadata: {
-            items: items.map(i => ({
-              id: i.product.id, qty: i.quantity,
-              price: getItemPiPrice(i),
-              shipping: getShippingPi(i),
-            })),
-            shipping: form,
-            userId: user?.id,
-            pi_price_at_order: piPrice,
-          },
+      const paymentData = {
+        amount: grandTotal,
+        memo: isAr ? 'طلب من Halalco' : 'Order from Halalco',
+        metadata: {
+          items: items.map(i => ({
+            id: i.product.id || "", 
+            qty: i.quantity || 1,
+            price: getItemPiPrice(i) || 0,
+            shipping: getShippingPi(i) || 0,
+          })),
+          shipping: form,
+          userId: user?.id || "",
+          pi_price_at_order: piPrice || 0,
+          coupon_code: appliedCoupon?.code || "",
+          discount_percent: appliedCoupon?.discount_percent || 0,
         },
+      };
+
+      window.Pi.createPayment(
+        paymentData,
         {
-          onReadyForServerApproval: async (paymentId) => {
+          onReadyForServerApproval: async (paymentId: string) => {
             try {
               const { error } = await supabase.functions.invoke('pi-approve', {
                 body: {
                   paymentId,
-                  userId: user?.id,
+                  userId: user?.id || "",
                   items: items.map(i => ({
                     id: i.product.id, qty: i.quantity,
                     price: getItemPiPrice(i),
                   })),
                   shipping: form,
                   total: grandTotal,
-                  pi_price_at_order: piPrice,
-                  // إرسال الكوبون للسيرفر (اختياري)
-                  coupon_code: appliedCoupon?.code || null,
+                  pi_price_at_order: piPrice || 0,
+                  coupon_code: appliedCoupon?.code || "",
                   discount_percent: appliedCoupon?.discount_percent || 0,
                 },
               });
-              if (error) {
-                console.error('Approve error:', error);
-                toast.error(t('error'));
-                setIsProcessing(false);
-              }
-            } catch (err) {
-              console.error('Approve call failed:', err);
-              toast.error(t('error'));
-              setIsProcessing(false);
-            }
+              if (error) { console.error('Approve error:', error); toast.error(t('error')); }
+            } catch (err) { console.error('Approve call failed:', err); toast.error(t('error')); }
           },
-          onReadyForServerCompletion: async (paymentId, txid) => {
+          onReadyForServerCompletion: async (paymentId: string, txid: string) => {
             try {
               const { error } = await supabase.functions.invoke('pi-complete', {
                 body: { paymentId, txid },
               });
-              if (error) {
-                console.error('Complete error:', error);
-                toast.error(t('error'));
-                setIsProcessing(false);
-              } else {
-                // ✅ زيادة عداد استخدام الكوبون
+              if (error) { console.error('Complete error:', error); toast.error(t('error')); }
+              else {
                 if (appliedCoupon) {
                   await supabase.from('coupons').update({ used_count: (appliedCoupon.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
                 }
-                
-                // ✅ حفظ العنوان بصمت للمرة القادمة
                 saveAddressMutation.mutate(undefined, { onSuccess: () => {}, onError: () => {} });
-                
                 clearCart();
                 toast.success(t('paymentSuccess'));
                 navigate('/profile');
               }
-            } catch (err) {
-              console.error('Complete call failed:', err);
-              toast.error(t('error'));
-              setIsProcessing(false);
-            }
+            } catch (err) { console.error('Complete call failed:', err); toast.error(t('error')); }
           },
-          onCancel: () => { 
+          onCancel: () => { setIsProcessing(false); toast.error(isAr ? 'تم إلغاء الدفع' : 'Payment cancelled'); },
+          onError: (err: any) => { 
+            console.error('Pi SDK Error Callback:', err);
             setIsProcessing(false); 
-            toast.error(isAr ? 'تم إلغاء الدفع' : 'Payment cancelled'); 
-          },
-          onError: () => { 
-            setIsProcessing(false); 
-            toast.error(t('error')); 
+            toast.error(isAr ? 'خطأ في شبكة Pi' : 'Pi Network Error'); 
           },
         }
       );
-    } catch { 
-      toast.error(t('error')); 
-      setIsProcessing(false); 
+    } catch (err: any) { 
+       console.error('Try/Catch Synchronous Error:', err);
+       toast.error(isAr ? `خطأ داخلي: ${err.message || 'غير معروف'}` : `Local Error: ${err.message || 'Unknown'}`); 
+       setIsProcessing(false); 
     }
   };
 
@@ -277,7 +254,6 @@ const Checkout = () => {
                     <MapPin className="h-5 w-5 text-primary" />{t('shippingInfo')}
                   </h2>
                   <Button
-                    type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => saveAddressMutation.mutate(undefined, { onSuccess: () => toast.success(isAr ? 'تم حفظ العنوان' : 'Address saved') })}
@@ -337,7 +313,7 @@ const Checkout = () => {
                     <span>{totalShipping.toFixed(4)} π</span>
                   </div>
                 )}
-                
+
                 {/* Coupon Section */}
                 <div className="border-t border-border pt-3 mb-3">
                   <Label className="text-xs text-muted-foreground mb-1 block">{isAr ? 'كوبون الخصم' : 'Coupon Code'}</Label>
@@ -350,11 +326,11 @@ const Checkout = () => {
                       disabled={!!appliedCoupon}
                     />
                     {appliedCoupon ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} className="h-9 text-xs shrink-0">
+                      <Button size="sm" variant="outline" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} className="h-9 text-xs shrink-0">
                         {isAr ? 'إزالة' : 'Remove'}
                       </Button>
                     ) : (
-                      <Button type="button" size="sm" onClick={applyCoupon} className="h-9 text-xs bg-primary text-primary-foreground shrink-0">
+                      <Button size="sm" onClick={applyCoupon} className="h-9 text-xs bg-primary text-primary-foreground shrink-0">
                         {isAr ? 'تطبيق' : 'Apply'}
                       </Button>
                     )}
