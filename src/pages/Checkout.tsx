@@ -90,9 +90,8 @@ const Checkout = () => {
         }, { onConflict: 'user_id' });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, _vars, context) => {
       queryClient.invalidateQueries({ queryKey: ['saved-address'] });
-      toast.success(isAr ? 'تم حفظ العنوان' : 'Address saved');
     },
   });
 
@@ -158,9 +157,6 @@ const Checkout = () => {
     }
     setIsProcessing(true);
 
-    // Save address for next time
-    saveAddressMutation.mutate();
-
     try {
       window.Pi.createPayment(
         {
@@ -209,6 +205,8 @@ const Checkout = () => {
                 if (appliedCoupon) {
                   await supabase.from('coupons').update({ used_count: (appliedCoupon.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
                 }
+              // Save address for next time (silently)
+                saveAddressMutation.mutate(undefined, { onSuccess: () => {}, onError: () => {} });
                 clearCart();
                 toast.success(t('paymentSuccess'));
                 navigate('/profile');
@@ -240,7 +238,7 @@ const Checkout = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => saveAddressMutation.mutate()}
+                    onClick={() => saveAddressMutation.mutate(undefined, { onSuccess: () => toast.success(isAr ? 'تم حفظ العنوان' : 'Address saved') })}
                     disabled={saveAddressMutation.isPending || !form.name}
                     className="text-xs text-primary"
                   >
