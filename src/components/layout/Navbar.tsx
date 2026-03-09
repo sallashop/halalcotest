@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingCart, User, LogIn, Globe, Menu, X, Leaf, Settings } from 'lucide-react';
+import { ShoppingCart, User, LogIn, Globe, Menu, X, Settings, Heart } from 'lucide-react';
+import HalalcoLogo from '@/components/HalalcoLogo';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,9 +26,7 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-xl">
       <div className="container mx-auto flex items-center justify-between px-4 py-3">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-primary">
-            <Leaf className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <HalalcoLogo className="h-9 w-9 text-primary" />
           <span className="text-lg font-bold text-foreground">Halalco</span>
         </Link>
 
@@ -66,6 +65,14 @@ const Navbar = () => {
               )}
             </Button>
           </Link>
+
+          {isAuthenticated && (
+            <Link to="/favorites">
+              <Button variant="ghost" size="sm" className="text-muted-foreground">
+                <Heart className="h-4 w-4" />
+              </Button>
+            </Link>
+          )}
 
           {isAuthenticated ? (
             <div className="hidden md:flex items-center gap-2">
@@ -135,10 +142,14 @@ const Navbar = () => {
                       {t('admin')}
                     </Link>
                   )}
-                  <Link to="/profile" onClick={() => setMobileOpen(false)}
-                    className="rounded-lg px-3 py-2 text-sm font-medium text-foreground">
-                    {t('profile')}
-                  </Link>
+                   <Link to="/favorites" onClick={() => setMobileOpen(false)}
+                     className="rounded-lg px-3 py-2 text-sm font-medium text-foreground">
+                     {language === 'ar' ? 'المفضلة' : 'Wishlist'}
+                   </Link>
+                   <Link to="/profile" onClick={() => setMobileOpen(false)}
+                     className="rounded-lg px-3 py-2 text-sm font-medium text-foreground">
+                     {t('profile')}
+                   </Link>
                   <button onClick={() => { logout(); setMobileOpen(false); }}
                     className="rounded-lg px-3 py-2 text-sm font-medium text-start text-destructive">
                     {t('logout')}
