@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X, Truck, Info } from 'lucide-react';
+import { Package, ShoppingCart, Plus, Pencil, Trash2, LayoutDashboard, DollarSign, AlertTriangle, Grid3X3, Upload, X, Truck, Info, Tag, MessageCircle, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -83,7 +83,7 @@ const Admin = () => {
   const [editingProduct, setEditingProduct] = useState<Tables<'products'> | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyProduct);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [deleteType, setDeleteType] = useState<'product' | 'category' | 'shipping'>('product');
+  const [deleteType, setDeleteType] = useState<'product' | 'category' | 'shipping' | 'coupon'>('product');
 
   const [categoryDialog, setCategoryDialog] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Tables<'categories'> | null>(null);
@@ -92,6 +92,12 @@ const Admin = () => {
   const [shippingDialog, setShippingDialog] = useState(false);
   const [editingShipping, setEditingShipping] = useState<any>(null);
   const [shipForm, setShipForm] = useState<ShippingCatForm>(emptyShippingCat);
+
+  const [couponDialog, setCouponDialog] = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState<any>(null);
+  const [couponForm, setCouponForm] = useState({ code: '', discount_percent: 0, max_uses: 0, description_ar: '', description_en: '', is_active: true, expires_at: '' });
+
+  const [whatsappNumber, setWhatsappNumber] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const catFileInputRef = useRef<HTMLInputElement>(null);
@@ -252,6 +258,73 @@ const Admin = () => {
     },
   });
 
+  // Coupons
+  const { data: coupons = [] } = useQuery({
+    queryKey: ['admin-coupons'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('coupons').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const saveCouponMutation = useMutation({
+    mutationFn: async (data: any) => {
+      if (data.id) {
+        const { id, ...rest } = data;
+        const { error } = await supabase.from('coupons').update(rest).eq('id', id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('coupons').insert(data);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-coupons'] });
+      queryClient.invalidateQueries({ queryKey: ['active-coupons'] });
+      setCouponDialog(false);
+      setEditingCoupon(null);
+      toast.success(t('success'));
+    },
+    onError: () => toast.error(t('error')),
+  });
+
+  const deleteCouponMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('coupons').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-coupons'] });
+      setDeleteId(null);
+      toast.success(t('success'));
+    },
+  });
+
+  // WhatsApp settings
+  const { data: whatsappSetting } = useQuery({
+    queryKey: ['whatsapp-setting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('settings').select('value').eq('key', 'whatsapp_number').maybeSingle();
+      return data?.value || '';
+    },
+  });
+
+  useEffect(() => {
+    if (whatsappSetting) setWhatsappNumber(whatsappSetting);
+  }, [whatsappSetting]);
+
+  const saveWhatsappMutation = useMutation({
+    mutationFn: async (num: string) => {
+      const { error } = await supabase.from('settings').upsert({ key: 'whatsapp_number', value: num }, { onConflict: 'key' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-setting'] });
+      toast.success(t('success'));
+    },
+  });
+
   const openEdit = (p: Tables<'products'>) => {
     setEditingProduct(p);
     setForm({
@@ -351,6 +424,7 @@ const Admin = () => {
     if (!deleteId) return;
     if (deleteType === 'category') deleteCategoryMutation.mutate(deleteId);
     else if (deleteType === 'shipping') deleteShippingMutation.mutate(deleteId);
+    else if (deleteType === 'coupon' as any) deleteCouponMutation.mutate(deleteId);
     else deleteMutation.mutate(deleteId);
   };
 
@@ -392,8 +466,10 @@ const Admin = () => {
             <TabsList className="bg-muted inline-flex w-auto min-w-full sm:min-w-0 gap-1">
               <TabsTrigger value="products" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageProducts')}</TabsTrigger>
               <TabsTrigger value="categories" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageCategories')}</TabsTrigger>
-              <TabsTrigger value="shipping" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'فئات الشحن' : 'Shipping'}</TabsTrigger>
+              <TabsTrigger value="shipping" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الشحن' : 'Shipping'}</TabsTrigger>
               <TabsTrigger value="orders" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageOrders')}</TabsTrigger>
+              <TabsTrigger value="coupons" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الكوبونات' : 'Coupons'}</TabsTrigger>
+              <TabsTrigger value="settings" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الإعدادات' : 'Settings'}</TabsTrigger>
             </TabsList>
           </div>
 
@@ -528,6 +604,73 @@ const Admin = () => {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          {/* Coupons Tab */}
+          <TabsContent value="coupons">
+            <div className="flex justify-end mb-4">
+              <Button onClick={() => { setEditingCoupon(null); setCouponForm({ code: '', discount_percent: 0, max_uses: 0, description_ar: '', description_en: '', is_active: true, expires_at: '' }); setCouponDialog(true); }} className="bg-primary text-primary-foreground">
+                <Plus className="h-4 w-4 me-1" />{isAr ? 'إضافة كوبون' : 'Add Coupon'}
+              </Button>
+            </div>
+            <div className="grid gap-3">
+              {coupons.map((c: any) => (
+                <Card key={c.id} className="border-border/50 bg-card">
+                  <CardContent className="flex items-center gap-4 p-4">
+                    <div className="h-10 w-10 rounded-xl bg-accent/10 flex items-center justify-center">
+                      <Tag className="h-5 w-5 text-accent" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <code className="font-bold text-foreground">{c.code}</code>
+                        <Badge variant={c.is_active ? 'default' : 'destructive'} className={c.is_active ? 'bg-primary/10 text-primary text-xs' : 'text-xs'}>
+                          {c.is_active ? (isAr ? 'نشط' : 'Active') : (isAr ? 'معطل' : 'Inactive')}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{c.discount_percent}% {isAr ? 'خصم' : 'off'} • {c.used_count}/{c.max_uses || '∞'} {isAr ? 'استخدام' : 'uses'}</p>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => {
+                      setEditingCoupon(c);
+                      setCouponForm({ code: c.code, discount_percent: c.discount_percent, max_uses: c.max_uses || 0, description_ar: c.description_ar || '', description_en: c.description_en || '', is_active: c.is_active, expires_at: c.expires_at ? c.expires_at.split('T')[0] : '' });
+                      setCouponDialog(true);
+                    }}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => { setDeleteType('coupon'); setDeleteId(c.id); }}><Trash2 className="h-4 w-4" /></Button>
+                  </CardContent>
+                </Card>
+              ))}
+              {coupons.length === 0 && <p className="text-center text-muted-foreground py-8">{isAr ? 'لا توجد كوبونات' : 'No coupons yet'}</p>}
+            </div>
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings">
+            <Card className="border-border/50 bg-card max-w-md">
+              <CardContent className="p-6">
+                <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
+                  <MessageCircle className="h-5 w-5 text-primary" />
+                  {isAr ? 'رقم واتساب التواصل' : 'WhatsApp Contact Number'}
+                </h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {isAr ? 'أدخل رقم الواتساب مع رمز الدولة (مثال: 201234567890)' : 'Enter WhatsApp number with country code (e.g. 201234567890)'}
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={whatsappNumber}
+                    onChange={e => setWhatsappNumber(e.target.value)}
+                    placeholder="201234567890"
+                    className="bg-background border-border"
+                    dir="ltr"
+                  />
+                  <Button
+                    onClick={() => saveWhatsappMutation.mutate(whatsappNumber)}
+                    disabled={saveWhatsappMutation.isPending}
+                    className="bg-primary text-primary-foreground shrink-0"
+                  >
+                    <Save className="h-4 w-4 me-1" />{t('save')}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
@@ -791,6 +934,60 @@ const Admin = () => {
                 saveShippingMutation.mutate(editingShipping ? { ...shipForm, id: editingShipping.id } : shipForm);
               }}
               disabled={saveShippingMutation.isPending}
+              className="bg-primary text-primary-foreground"
+            >{t('save')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Coupon Dialog */}
+      <Dialog open={couponDialog} onOpenChange={setCouponDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingCoupon ? (isAr ? 'تعديل الكوبون' : 'Edit Coupon') : (isAr ? 'إضافة كوبون' : 'Add Coupon')}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label className="text-xs">{isAr ? 'كود الكوبون' : 'Coupon Code'}</Label>
+              <Input value={couponForm.code} onChange={e => setCouponForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} className="mt-1 font-mono" placeholder="SAVE20" dir="ltr" />
+            </div>
+            <div>
+              <Label className="text-xs">{isAr ? 'نسبة الخصم (%)' : 'Discount %'}</Label>
+              <Input type="number" min={1} max={100} value={couponForm.discount_percent} onChange={e => setCouponForm(f => ({ ...f, discount_percent: parseFloat(e.target.value) || 0 }))} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">{isAr ? 'الحد الأقصى للاستخدام (0 = بلا حدود)' : 'Max uses (0 = unlimited)'}</Label>
+              <Input type="number" min={0} value={couponForm.max_uses} onChange={e => setCouponForm(f => ({ ...f, max_uses: parseInt(e.target.value) || 0 }))} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">{isAr ? 'الوصف (عربي)' : 'Description (AR)'}</Label>
+              <Input value={couponForm.description_ar} onChange={e => setCouponForm(f => ({ ...f, description_ar: e.target.value }))} className="mt-1" placeholder={isAr ? 'خصم خاص لعملائنا' : 'Special discount'} />
+            </div>
+            <div>
+              <Label className="text-xs">{isAr ? 'الوصف (EN)' : 'Description (EN)'}</Label>
+              <Input value={couponForm.description_en} onChange={e => setCouponForm(f => ({ ...f, description_en: e.target.value }))} className="mt-1" placeholder="Special discount" />
+            </div>
+            <div>
+              <Label className="text-xs">{isAr ? 'تاريخ الانتهاء (اختياري)' : 'Expiry date (optional)'}</Label>
+              <Input type="date" value={couponForm.expires_at} onChange={e => setCouponForm(f => ({ ...f, expires_at: e.target.value }))} className="mt-1" dir="ltr" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={couponForm.is_active} onCheckedChange={v => setCouponForm(f => ({ ...f, is_active: v }))} />
+              <Label className="text-sm">{isAr ? 'نشط' : 'Active'}</Label>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCouponDialog(false)}>{t('cancel')}</Button>
+            <Button
+              onClick={() => {
+                if (!couponForm.code) { toast.error(isAr ? 'أدخل كود الكوبون' : 'Enter coupon code'); return; }
+                const data: any = { ...couponForm };
+                if (!data.expires_at) data.expires_at = null;
+                else data.expires_at = new Date(data.expires_at).toISOString();
+                if (editingCoupon) data.id = editingCoupon.id;
+                saveCouponMutation.mutate(data);
+              }}
+              disabled={saveCouponMutation.isPending}
               className="bg-primary text-primary-foreground"
             >{t('save')}</Button>
           </DialogFooter>
