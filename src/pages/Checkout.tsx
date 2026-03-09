@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, MapPin, Phone, User as UserIcon, Truck, Save } from 'lucide-react';
+import { CreditCard, MapPin, Phone, User as UserIcon, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import Footer from '@/components/layout/Footer';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import PriceDisplay, { usePiPrice, calcPiPrice } from '@/components/products/PriceDisplay';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 interface ShippingForm {
   name: string;
@@ -26,15 +26,11 @@ interface ShippingForm {
 
 const Checkout = () => {
   const { t, language } = useLanguage();
-  // 🔥 تم إضافة ensurePaymentsScope من الـ AuthContext
-  const { user, ensurePaymentsScope } = useAuth();
+  const { user } = useAuth();
   const { items, total, clearCart } = useCart();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
   const [form, setForm] = useState<ShippingForm>({ name: '', phone: '', address: '', city: '', notes: '' });
-  const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const isAr = language === 'ar';
 
   const { data: piPriceData } = usePiPrice();
@@ -48,62 +44,15 @@ const Checkout = () => {
     },
   });
 
-  // Load saved address
-  const { data: savedAddress } = useQuery({
-    queryKey: ['saved-address', user?.piUid],
-    queryFn: async () => {
-      if (!user?.piUid) return null;
-      const { data } = await supabase
-        .from('saved_addresses')
-        .select('*')
-        .eq('user_id', user.piUid)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!user?.piUid,
-  });
-
-  // Auto-fill saved address
-  useEffect(() => {
-    if (savedAddress && !form.name && !form.phone) {
-      setForm({
-        name: savedAddress.name || '',
-        phone: savedAddress.phone || '',
-        address: savedAddress.address || '',
-        city: savedAddress.city || '',
-        notes: savedAddress.notes || '',
-      });
-    }
-  }, [savedAddress]);
-
-  const saveAddressMutation = useMutation({
-    mutationFn: async () => {
-      if (!user?.piUid) return;
-      const { error } = await supabase
-        .from('saved_addresses')
-        .upsert({
-          user_id: user.piUid,
-          name: form.name,
-          phone: form.phone,
-          address: form.address,
-          city: form.city,
-          notes: form.notes,
-        }, { onConflict: 'user_id' });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-address'] });
-    },
-  });
-
   const updateField = (field: keyof ShippingForm, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
   const getName = (p: typeof items[0]['product']) => language === 'ar' ? p.name_ar : p.name_en;
 
+  // Calculate real total with dynamic pricing and shipping
   const piPrice = piPriceData?.price || null;
-
+  
   const getItemPiPrice = (item: typeof items[0]) => {
     const priceType = (item.product as any).price_type || 'fixed';
     const priceUsd = (item.product as any).price_usd || 0;
@@ -120,138 +69,105 @@ const Checkout = () => {
 
   const subtotal = items.reduce((sum, i) => sum + getItemPiPrice(i) * i.quantity, 0);
   const totalShipping = items.reduce((sum, i) => sum + getShippingPi(i), 0);
-  const discount = appliedCoupon ? (subtotal * appliedCoupon.discount_percent / 100) : 0;
-  const grandTotal = parseFloat((subtotal - discount + totalShipping).toFixed(4));
-
-  const applyCoupon = async () => {
-    if (!couponCode.trim()) return;
-    const { data, error } = await supabase
-      .from('coupons')
-      .select('*')
-      .eq('code', couponCode.trim().toUpperCase())
-      .eq('is_active', true)
-      .maybeSingle();
-    if (error || !data) {
-      toast.error(isAr ? 'كوبون غير صالح' : 'Invalid coupon');
-      return;
-    }
-    if (data.expires_at && new Date(data.expires_at) < new Date()) {
-      toast.error(isAr ? 'الكوبون منتهي الصلاحية' : 'Coupon expired');
-      return;
-    }
-    if (data.max_uses > 0 && data.used_count >= data.max_uses) {
-      toast.error(isAr ? 'الكوبون استنفد' : 'Coupon maxed out');
-      return;
-    }
-    setAppliedCoupon(data);
-    toast.success(isAr ? `تم تطبيق خصم ${data.discount_percent}%` : `${data.discount_percent}% discount applied`);
-  };
+  const grandTotal = parseFloat((subtotal + totalShipping).toFixed(4));
 
   const handlePayWithPi = async () => {
     if (!form.name || !form.phone || !form.address || !form.city) {
       toast.error(isAr ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
       return;
     }
-
-    if (grandTotal <= 0) {
-      toast.error(isAr ? 'إجمالي الطلب غير صالح للدفع' : 'Order total is invalid for payment');
-      return;
-    }
-
     if (!window.Pi) {
       toast.error('Pi SDK غير متاح');
       return;
     }
-
+    
     setIsProcessing(true);
-
+    
     try {
-      // 🛡️ الخطوة 1: التحقق وتجديد صلاحية الدفع (Payments Scope) قبل الدفع
-      const hasScopes = await ensurePaymentsScope();
-      if (!hasScopes) {
-        toast.error(isAr ? 'لم تقم بإعطاء صلاحية الدفع. يرجى إعادة المحاولة.' : 'Payment scope not granted. Please try again.');
-        setIsProcessing(false);
-        return;
-      }
+      // ✅ التعديل هنا: تجديد صلاحية الدفع قبل إنشاء الطلب لتجنب خطأ Scope
+      // وتمرير دالة `onIncompletePaymentFound` لتجنب خطأ `n is not a function`
+      await window.Pi.authenticate(
+        ['payments'], 
+        (payment) => console.log('Incomplete payment during checkout:', payment)
+      );
 
-      // 💳 الخطوة 2: إنشاء عملية الدفع
+      // إنشاء عملية الدفع
       window.Pi.createPayment(
         {
           amount: grandTotal,
           memo: isAr ? 'طلب من Halalco' : 'Order from Halalco',
           metadata: {
-            userId: user?.id || 'unknown',
-            itemCount: items.length
+            items: items.map(i => ({
+              id: i.product.id, qty: i.quantity,
+              price: getItemPiPrice(i),
+              shipping: getShippingPi(i),
+            })),
+            shipping: form,
+            userId: user?.id,
+            pi_price_at_order: piPrice,
           },
         },
         {
           onReadyForServerApproval: async (paymentId) => {
             try {
-              const { data, error } = await supabase.functions.invoke('pi-approve', {
+              const { error } = await supabase.functions.invoke('pi-approve', {
                 body: {
                   paymentId,
                   userId: user?.id,
                   items: items.map(i => ({
-                    id: i.product.id, 
-                    qty: i.quantity,
+                    id: i.product.id, qty: i.quantity,
                     price: getItemPiPrice(i),
-                    shipping: getShippingPi(i),
                   })),
                   shipping: form,
                   total: grandTotal,
-                  pi_price_at_order: piPrice || 0,
-                  coupon_code: appliedCoupon?.code || null,
-                  discount_percent: appliedCoupon?.discount_percent || 0,
+                  pi_price_at_order: piPrice,
                 },
               });
-              
-              if (error) throw error;
-              if (data?.error) throw new Error(data.error);
-              
-            } catch (err: any) {
+              if (error) {
+                console.error('Approve error:', error);
+                toast.error(t('error'));
+                setIsProcessing(false); // إيقاف التحميل عند الخطأ
+              }
+            } catch (err) {
               console.error('Approve call failed:', err);
-              toast.error(err.message || t('error'));
-              setIsProcessing(false);
+              toast.error(t('error'));
+              setIsProcessing(false); // إيقاف التحميل عند الخطأ
             }
           },
           onReadyForServerCompletion: async (paymentId, txid) => {
             try {
-              const { data, error } = await supabase.functions.invoke('pi-complete', {
+              const { error } = await supabase.functions.invoke('pi-complete', {
                 body: { paymentId, txid },
               });
-              
-              if (error) throw error;
-              if (data?.error) throw new Error(data.error);
-
-              // تحديث الكوبون والحفظ السري للعنوان
-              if (appliedCoupon) {
-                await supabase.from('coupons').update({ used_count: (appliedCoupon.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
+              if (error) {
+                console.error('Complete error:', error);
+                toast.error(t('error'));
+                setIsProcessing(false); // إيقاف التحميل عند الخطأ
+              } else {
+                clearCart();
+                toast.success(t('paymentSuccess'));
+                navigate('/profile');
               }
-              saveAddressMutation.mutate(undefined, { onSuccess: () => {}, onError: () => {} });
-              
-              clearCart();
-              toast.success(t('paymentSuccess'));
-              navigate('/profile');
-            } catch (err: any) {
+            } catch (err) {
               console.error('Complete call failed:', err);
-              toast.error(err.message || t('error'));
-              setIsProcessing(false);
+              toast.error(t('error'));
+              setIsProcessing(false); // إيقاف التحميل عند الخطأ
             }
           },
           onCancel: () => { 
             setIsProcessing(false); 
             toast.error(isAr ? 'تم إلغاء الدفع' : 'Payment cancelled'); 
           },
-          onError: (error: any) => { 
-            console.error('Pi Payment Error:', error);
+          onError: (error) => { 
+            console.error('Payment Error:', error);
             setIsProcessing(false); 
-            toast.error(error?.message || t('error')); 
+            toast.error(error.message || t('error')); 
           },
         }
       );
-    } catch (error: any) { 
-      console.error('Pi SDK Error:', error);
-      toast.error(error?.message || t('error')); 
+    } catch (error: any) {
+      console.error('Checkout error:', error);
+      toast.error(t('error')); 
       setIsProcessing(false); 
     }
   };
@@ -267,22 +183,9 @@ const Checkout = () => {
           <div className="lg:col-span-2">
             <Card className="border-border/50 bg-card">
               <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-bold text-foreground flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-primary" />{t('shippingInfo')}
-                  </h2>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => saveAddressMutation.mutate(undefined, { onSuccess: () => toast.success(isAr ? 'تم حفظ العنوان' : 'Address saved') })}
-                    disabled={saveAddressMutation.isPending || !form.name}
-                    className="text-xs text-primary"
-                  >
-                    <Save className="h-3 w-3 me-1" />
-                    {isAr ? 'حفظ العنوان' : 'Save Address'}
-                  </Button>
-                </div>
+                <h2 className="font-bold text-foreground mb-4 flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-primary" />{t('shippingInfo')}
+                </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm text-foreground">{t('name')} *</Label>
@@ -332,38 +235,11 @@ const Checkout = () => {
                     <span>{totalShipping.toFixed(4)} π</span>
                   </div>
                 )}
-
-                {/* Coupon */}
-                <div className="border-t border-border pt-3 mb-3">
-                  <Label className="text-xs text-muted-foreground mb-1 block">{isAr ? 'كوبون الخصم' : 'Coupon Code'}</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={couponCode}
-                      onChange={e => setCouponCode(e.target.value.toUpperCase())}
-                      placeholder={isAr ? 'أدخل الكوبون' : 'Enter code'}
-                      className="bg-background border-border text-sm h-9"
-                      disabled={!!appliedCoupon}
-                    />
-                    {appliedCoupon ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} className="h-9 text-xs shrink-0">
-                        {isAr ? 'إزالة' : 'Remove'}
-                      </Button>
-                    ) : (
-                      <Button type="button" size="sm" onClick={applyCoupon} className="h-9 text-xs bg-primary text-primary-foreground shrink-0">
-                        {isAr ? 'تطبيق' : 'Apply'}
-                      </Button>
-                    )}
-                  </div>
-                  {appliedCoupon && (
-                    <p className="text-xs text-primary mt-1">✓ {isAr ? `خصم ${appliedCoupon.discount_percent}%` : `${appliedCoupon.discount_percent}% off`} (-{discount.toFixed(4)} π)</p>
-                  )}
-                </div>
-
                 <div className="border-t border-border pt-3 flex justify-between items-center mb-6">
                   <span className="font-bold text-foreground">{t('total')}</span>
                   <span className="font-bold text-primary text-lg">{grandTotal.toFixed(4)} π</span>
                 </div>
-                <Button type="button" onClick={handlePayWithPi} disabled={isProcessing} className="w-full h-12 gradient-primary text-primary-foreground font-semibold text-base rounded-xl hover:opacity-90 transition-opacity">
+                <Button onClick={handlePayWithPi} disabled={isProcessing} className="w-full h-12 gradient-primary text-primary-foreground font-semibold text-base rounded-xl hover:opacity-90 transition-opacity">
                   {isProcessing ? <span className="animate-spin h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full" /> : <><CreditCard className="h-5 w-5 me-2" />{t('payWithPi')}</>}
                 </Button>
               </CardContent>
