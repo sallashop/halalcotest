@@ -1,4 +1,4 @@
-import { ShoppingCart, Star, Truck } from 'lucide-react'; // تمت إضافة Truck
+import { ShoppingCart, Star, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -6,12 +6,13 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
 import { Tables } from '@/integrations/supabase/types';
 import { cn } from '@/lib/utils';
-import PriceDisplay from './PriceDisplay'; // تم استيراد مكون السعر
+import PriceDisplay from './PriceDisplay';
+import FavoriteButton from './FavoriteButton'; // ✅ تم استيراد زر المفضلة
 
 interface ProductCardProps {
   product: Tables<'products'>;
   index?: number;
-  shippingPrice?: number; // تمت إضافة سعر الشحن
+  shippingPrice?: number;
 }
 
 const ProductCard = ({ product, index = 0, shippingPrice }: ProductCardProps) => {
@@ -57,7 +58,15 @@ const ProductCard = ({ product, index = 0, shippingPrice }: ProductCardProps) =>
             </div>
           )}
 
-          {/* Price Badge - Glassmorphism (تم التعديل لاستخدام PriceDisplay) */}
+          {/* ✅ زر المفضلة (تمت إضافته بتنسيق زجاجي متناسق مع السعر) */}
+          <div className="absolute top-3 start-3 z-10" onClick={(e) => e.stopPropagation()}>
+            <FavoriteButton 
+              productId={product.id} 
+              className="bg-background/80 backdrop-blur-md shadow-sm border border-border/10 hover:bg-background/90 transition-all rounded-full h-9 w-9" 
+            />
+          </div>
+
+          {/* Price Badge - Glassmorphism */}
           <div className="absolute top-3 end-3 rounded-[1rem] bg-background/90 backdrop-blur-md px-3 py-1.5 shadow-sm border border-border/10 flex items-center gap-1 z-10 text-primary font-bold">
             <PriceDisplay priceType={priceType} priceFixed={product.price} priceUsd={priceUsd} />
           </div>
@@ -108,7 +117,7 @@ const ProductCard = ({ product, index = 0, shippingPrice }: ProductCardProps) =>
               <span className="truncate">{t('addToCart')}</span>
             </Button>
 
-            {/* Shipping Price Row (تم النقل من الكود القديم مع تحسين المظهر ليناسب التصميم الجديد) */}
+            {/* Shipping Price Row */}
             {shippingPrice !== undefined && (
               <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/30 py-1.5 rounded-lg">
                 <Truck className="h-3.5 w-3.5" />
