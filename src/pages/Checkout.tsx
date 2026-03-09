@@ -90,7 +90,7 @@ const Checkout = () => {
         }, { onConflict: 'user_id' });
       if (error) throw error;
     },
-    onSuccess: (_data, _vars, context) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['saved-address'] });
     },
   });
@@ -151,10 +151,17 @@ const Checkout = () => {
       toast.error(isAr ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
       return;
     }
+    
+    if (grandTotal <= 0) {
+      toast.error(isAr ? 'إجمالي الطلب غير صالح للدفع' : 'Order total is invalid for payment');
+      return;
+    }
+
     if (!window.Pi) {
       toast.error('Pi SDK غير متاح');
       return;
     }
+    
     setIsProcessing(true);
 
     try {
@@ -163,61 +170,83 @@ const Checkout = () => {
           amount: grandTotal,
           memo: isAr ? 'طلب من Halalco' : 'Order from Halalco',
           metadata: {
-            items: items.map(i => ({
-              id: i.product.id, qty: i.quantity,
-              price: getItemPiPrice(i),
-              shipping: getShippingPi(i),
-            })),
-            shipping: form,
-            userId: user?.id,
-            pi_price_at_order: piPrice,
-            coupon_code: appliedCoupon?.code || null,
-            discount_percent: appliedCoupon?.discount_percent || 0,
+            // تم تقليل البيانات هنا لتجنب خطأ تجاوز الحد المسموح به في شبكة Pi
+            userId: user?.id || 'unknown',
+            itemCount: items.length
           },
         },
         {
           onReadyForServerApproval: async (paymentId) => {
             try {
-              const { error } = await supabase.functions.invoke('pi-approve', {
+              const { data, error } = await supabase.functions.invoke('pi-approve', {
                 body: {
                   paymentId,
                   userId: user?.id,
+                  // نرسل البيانات كاملة للسيرفر مباشرة هنا بدلاً من الـ metadata
                   items: items.map(i => ({
-                    id: i.product.id, qty: i.quantity,
+                    id: i.product.id, 
+                    qty: i.quantity,
                     price: getItemPiPrice(i),
+                    shipping: getShippingPi(i),
                   })),
                   shipping: form,
                   total: grandTotal,
-                  pi_price_at_order: piPrice,
+                  pi_price_at_order: piPrice || 0,
+                  coupon_code: appliedCoupon?.code || null,
+                  discount_percent: appliedCoupon?.discount_percent || 0,
                 },
               });
-              if (error) { console.error('Approve error:', error); toast.error(t('error')); }
-            } catch (err) { console.error('Approve call failed:', err); toast.error(t('error')); }
+              
+              if (error) throw error;
+              if (data?.error) throw new Error(data.error);
+              
+            } catch (err: any) {
+              console.error('Approve call failed:', err);
+              toast.error(err.message || t('error'));
+              setIsProcessing(false); // إيقاف علامة التحميل عند الخطأ
+            }
           },
           onReadyForServerCompletion: async (paymentId, txid) => {
             try {
-              const { error } = await supabase.functions.invoke('pi-complete', {
+              const { data, error } = await supabase.functions.invoke('pi-complete', {
                 body: { paymentId, txid },
               });
-              if (error) { console.error('Complete error:', error); toast.error(t('error')); }
-              else {
-                // Increment coupon usage
-                if (appliedCoupon) {
-                  await supabase.from('coupons').update({ used_count: (appliedCoupon.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
-                }
-              // Save address for next time (silently)
-                saveAddressMutation.mutate(undefined, { onSuccess: () => {}, onError: () => {} });
-                clearCart();
-                toast.success(t('paymentSuccess'));
-                navigate('/profile');
+              
+              if (error) throw error;
+              if (data?.error) throw new Error(data.error);
+
+              // Increment coupon usage
+              if (appliedCoupon) {
+                await supabase.from('coupons').update({ used_count: (appliedCoupon.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
               }
-            } catch (err) { console.error('Complete call failed:', err); toast.error(t('error')); }
+              
+              // Save address for next time (silently)
+              saveAddressMutation.mutate(undefined, { onSuccess: () => {}, onError: () => {} });
+              clearCart();
+              toast.success(t('paymentSuccess'));
+              navigate('/profile');
+            } catch (err: any) {
+              console.error('Complete call failed:', err);
+              toast.error(err.message || t('error'));
+              setIsProcessing(false); // إيقاف علامة التحميل عند الخطأ
+            }
           },
-          onCancel: () => { setIsProcessing(false); toast.error(isAr ? 'تم إلغاء الدفع' : 'Payment cancelled'); },
-          onError: () => { setIsProcessing(false); toast.error(t('error')); },
+          onCancel: () => { 
+            setIsProcessing(false); 
+            toast.error(isAr ? 'تم إلغاء الدفع' : 'Payment cancelled'); 
+          },
+          onError: (error: any) => { 
+            console.error('Pi Payment Error:', error);
+            setIsProcessing(false); 
+            toast.error(error?.message || t('error')); 
+          },
         }
       );
-    } catch { toast.error(t('error')); setIsProcessing(false); }
+    } catch (error: any) { 
+      console.error('Pi SDK Error:', error);
+      toast.error(error?.message || t('error')); 
+      setIsProcessing(false); 
+    }
   };
 
   if (items.length === 0) { navigate('/cart'); return null; }
@@ -236,6 +265,7 @@ const Checkout = () => {
                     <MapPin className="h-5 w-5 text-primary" />{t('shippingInfo')}
                   </h2>
                   <Button
+                    type="button" // للحماية من السلوك الافتراضي
                     variant="ghost"
                     size="sm"
                     onClick={() => saveAddressMutation.mutate(undefined, { onSuccess: () => toast.success(isAr ? 'تم حفظ العنوان' : 'Address saved') })}
@@ -308,11 +338,11 @@ const Checkout = () => {
                       disabled={!!appliedCoupon}
                     />
                     {appliedCoupon ? (
-                      <Button size="sm" variant="outline" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} className="h-9 text-xs shrink-0">
+                      <Button type="button" size="sm" variant="outline" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} className="h-9 text-xs shrink-0">
                         {isAr ? 'إزالة' : 'Remove'}
                       </Button>
                     ) : (
-                      <Button size="sm" onClick={applyCoupon} className="h-9 text-xs bg-primary text-primary-foreground shrink-0">
+                      <Button type="button" size="sm" onClick={applyCoupon} className="h-9 text-xs bg-primary text-primary-foreground shrink-0">
                         {isAr ? 'تطبيق' : 'Apply'}
                       </Button>
                     )}
@@ -326,7 +356,7 @@ const Checkout = () => {
                   <span className="font-bold text-foreground">{t('total')}</span>
                   <span className="font-bold text-primary text-lg">{grandTotal.toFixed(4)} π</span>
                 </div>
-                <Button onClick={handlePayWithPi} disabled={isProcessing} className="w-full h-12 gradient-primary text-primary-foreground font-semibold text-base rounded-xl hover:opacity-90 transition-opacity">
+                <Button type="button" onClick={handlePayWithPi} disabled={isProcessing} className="w-full h-12 gradient-primary text-primary-foreground font-semibold text-base rounded-xl hover:opacity-90 transition-opacity">
                   {isProcessing ? <span className="animate-spin h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full" /> : <><CreditCard className="h-5 w-5 me-2" />{t('payWithPi')}</>}
                 </Button>
               </CardContent>
