@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { User, Package, LogOut, MapPin, Phone, Calendar, ChevronDown, ChevronUp, ShoppingBag, MessageCircle } from 'lucide-react';
+import { User, Package, LogOut, MapPin, Phone, Calendar, ChevronDown, ChevronUp, ShoppingBag, MessageCircle, Truck, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -193,6 +193,24 @@ const Profile = () => {
                                 <p className="text-xs text-muted-foreground">
                                   {isAr ? `سعر Pi وقت الطلب: $${Number(order.pi_price_at_order).toFixed(4)}` : `Pi price at order: $${Number(order.pi_price_at_order).toFixed(4)}`}
                                 </p>
+                              )}
+
+                              {/* Tracking Info */}
+                              {order.tracking_number && (
+                                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                                  <p className="text-xs font-semibold text-foreground flex items-center gap-1 mb-1">
+                                    <Truck className="h-3.5 w-3.5 text-primary" />
+                                    {isAr ? 'تتبع الشحن' : 'Shipment Tracking'}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {isAr ? 'رقم الشحنة:' : 'Tracking #:'} <span dir="ltr" className="font-mono font-semibold text-foreground">{order.tracking_number}</span>
+                                  </p>
+                                  {order.tracking_receipt_url && (
+                                    <a href={order.tracking_receipt_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                                      <Eye className="h-3 w-3" />{isAr ? 'عرض إيصال الشحن' : 'View shipping receipt'}
+                                    </a>
+                                  )}
+                                </div>
                               )}
 
                               {/* WhatsApp Contact Button */}
