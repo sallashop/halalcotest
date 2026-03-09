@@ -9,6 +9,7 @@ import heroImage from '@/assets/hero-farm.jpg';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import ProductCard from '@/components/products/ProductCard';
+import CouponBanner from '@/components/home/CouponBanner';
 
 const Index = () => {
   const { t, language } = useLanguage();
@@ -179,6 +180,9 @@ const Index = () => {
           ))}
         </div>
       </section>
+
+      {/* Coupons */}
+      <CouponBanner />
 
       {/* Categories Section */}
       {categories.length > 0 && (
