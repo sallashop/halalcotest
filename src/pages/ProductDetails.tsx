@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { useQuery } from '@tanstack/react-query';
@@ -11,11 +12,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import PriceDisplay from '@/components/products/PriceDisplay';
+import FavoriteButton from '@/components/products/FavoriteButton';
+import ProductReviews from '@/components/products/ProductReviews';
 
 const ProductDetails = () => {
   const { id } = useParams<{ id: string }>();
   const { t, language } = useLanguage();
   const { addItem } = useCart();
+  const { user } = useAuth();
   const [qty, setQty] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
   const ArrowIcon = language === 'ar' ? ArrowRight : ArrowLeft;
@@ -26,6 +30,21 @@ const ProductDetails = () => {
       const { data, error } = await supabase.from('products').select('*').eq('id', id!).single();
       if (error) throw error;
       return data;
+    },
+    enabled: !!id,
+  });
+
+  // Get average rating
+  const { data: avgRating } = useQuery({
+    queryKey: ['avg-rating', id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('product_ratings')
+        .select('rating')
+        .eq('product_id', id!);
+      if (!data || data.length === 0) return { avg: product?.rating || 0, count: 0 };
+      const avg = data.reduce((s, r) => s + r.rating, 0) / data.length;
+      return { avg: Math.round(avg * 10) / 10, count: data.length };
     },
     enabled: !!id,
   });
@@ -73,8 +92,9 @@ const ProductDetails = () => {
   const unit = language === 'ar' ? (product.unit_ar || 'كيلو') : (product.unit_en || 'kg');
   const priceType = (product as any).price_type || 'fixed';
   const priceUsd = (product as any).price_usd || 0;
+  const maxQty = (product as any).max_quantity || 100;
+  const unitType = (product as any).unit_type || 'weight';
 
-  // Build images array: main image + extra images
   const images: string[] = [];
   if (product.image_url) images.push(product.image_url);
   if ((product as any).images?.length) {
@@ -97,11 +117,7 @@ const ProductDetails = () => {
           {/* Images */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
             <div className="relative aspect-square rounded-2xl overflow-hidden border border-border/50 card-shadow mb-3">
-              <img
-                src={images[selectedImage]}
-                alt={name}
-                className="h-full w-full object-cover"
-              />
+              <img src={images[selectedImage]} alt={name} className="h-full w-full object-cover" />
               {!product.in_stock && (
                 <div className="absolute inset-0 flex items-center justify-center bg-foreground/50">
                   <span className="rounded-full bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground">
@@ -109,6 +125,9 @@ const ProductDetails = () => {
                   </span>
                 </div>
               )}
+              <div className="absolute top-3 end-3">
+                <FavoriteButton productId={product.id} className="bg-card/80 backdrop-blur-sm" />
+              </div>
             </div>
             {images.length > 1 && (
               <div className="flex gap-2">
@@ -137,9 +156,17 @@ const ProductDetails = () => {
             <div className="flex items-center gap-3 mb-4">
               <div className="flex items-center gap-1">
                 <Star className="h-4 w-4 fill-accent text-accent" />
-                <span className="text-sm text-muted-foreground">{product.rating || 0}</span>
+                <span className="text-sm text-muted-foreground">{avgRating?.avg || product.rating || 0}</span>
+                {avgRating?.count ? (
+                  <span className="text-xs text-muted-foreground">({avgRating.count})</span>
+                ) : null}
               </div>
               <span className="text-sm text-muted-foreground">{product.sold || 0} {t('sold')}</span>
+              <Badge variant="outline" className="text-xs border-muted">
+                {unitType === 'weight'
+                  ? (language === 'ar' ? 'بالوزن' : 'By Weight')
+                  : (language === 'ar' ? 'بالقطعة' : 'By Piece')}
+              </Badge>
             </div>
 
             <div className="text-3xl font-bold text-primary mb-1">
@@ -147,11 +174,17 @@ const ProductDetails = () => {
             </div>
             <p className="text-sm text-muted-foreground mb-6">/ {unit}</p>
 
-            <p className="text-muted-foreground leading-relaxed mb-8">{description}</p>
+            <p className="text-muted-foreground leading-relaxed mb-4">{description}</p>
+
+            <p className="text-xs text-muted-foreground mb-4">
+              {language === 'ar'
+                ? `الحد الأقصى للطلب: ${maxQty} ${unitType === 'weight' ? unit : 'قطعة'}`
+                : `Max order: ${maxQty} ${unitType === 'weight' ? unit : 'pieces'}`}
+            </p>
 
             {/* Quantity + Add to Cart */}
             <div className="flex items-center gap-4 mt-auto">
-              <div className="flex items-center border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center border border-border rounded-xl overflow-hidden" dir="ltr">
                 <button
                   onClick={() => setQty(q => Math.max(1, q - 1))}
                   className="h-10 w-10 flex items-center justify-center hover:bg-muted transition-colors"
@@ -162,7 +195,7 @@ const ProductDetails = () => {
                   {qty}
                 </span>
                 <button
-                  onClick={() => setQty(q => q + 1)}
+                  onClick={() => setQty(q => Math.min(maxQty, q + 1))}
                   className="h-10 w-10 flex items-center justify-center hover:bg-muted transition-colors"
                 >
                   <Plus className="h-4 w-4" />
@@ -181,6 +214,9 @@ const ProductDetails = () => {
             </div>
           </motion.div>
         </div>
+
+        {/* Reviews Section */}
+        {id && <ProductReviews productId={id} />}
       </main>
       <Footer />
     </div>
