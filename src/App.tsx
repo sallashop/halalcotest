@@ -18,6 +18,8 @@ import Admin from "./pages/Admin";
 import AboutUs from "./pages/AboutUs";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfUse from "./pages/TermsOfUse";
+import ReturnPolicy from "./pages/ReturnPolicy";
+import Favorites from "./pages/Favorites";
 import NotFound from "./pages/NotFound";
 
 const ScrollToTop = () => {
@@ -50,6 +52,8 @@ const App = () => (
                 <Route path="/about" element={<AboutUs />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/terms" element={<TermsOfUse />} />
+                <Route path="/return-policy" element={<ReturnPolicy />} />
+                <Route path="/favorites" element={<Favorites />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
