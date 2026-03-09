@@ -26,7 +26,8 @@ interface ShippingForm {
 
 const Checkout = () => {
   const { t, language } = useLanguage();
-  const { user } = useAuth();
+  // 🔥 تم إضافة ensurePaymentsScope من الـ AuthContext
+  const { user, ensurePaymentsScope } = useAuth();
   const { items, total, clearCart } = useCart();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -151,7 +152,7 @@ const Checkout = () => {
       toast.error(isAr ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
       return;
     }
-    
+
     if (grandTotal <= 0) {
       toast.error(isAr ? 'إجمالي الطلب غير صالح للدفع' : 'Order total is invalid for payment');
       return;
@@ -161,16 +162,24 @@ const Checkout = () => {
       toast.error('Pi SDK غير متاح');
       return;
     }
-    
+
     setIsProcessing(true);
 
     try {
+      // 🛡️ الخطوة 1: التحقق وتجديد صلاحية الدفع (Payments Scope) قبل الدفع
+      const hasScopes = await ensurePaymentsScope();
+      if (!hasScopes) {
+        toast.error(isAr ? 'لم تقم بإعطاء صلاحية الدفع. يرجى إعادة المحاولة.' : 'Payment scope not granted. Please try again.');
+        setIsProcessing(false);
+        return;
+      }
+
+      // 💳 الخطوة 2: إنشاء عملية الدفع
       window.Pi.createPayment(
         {
           amount: grandTotal,
           memo: isAr ? 'طلب من Halalco' : 'Order from Halalco',
           metadata: {
-            // تم تقليل البيانات هنا لتجنب خطأ تجاوز الحد المسموح به في شبكة Pi
             userId: user?.id || 'unknown',
             itemCount: items.length
           },
@@ -182,7 +191,6 @@ const Checkout = () => {
                 body: {
                   paymentId,
                   userId: user?.id,
-                  // نرسل البيانات كاملة للسيرفر مباشرة هنا بدلاً من الـ metadata
                   items: items.map(i => ({
                     id: i.product.id, 
                     qty: i.quantity,
@@ -203,7 +211,7 @@ const Checkout = () => {
             } catch (err: any) {
               console.error('Approve call failed:', err);
               toast.error(err.message || t('error'));
-              setIsProcessing(false); // إيقاف علامة التحميل عند الخطأ
+              setIsProcessing(false);
             }
           },
           onReadyForServerCompletion: async (paymentId, txid) => {
@@ -215,20 +223,19 @@ const Checkout = () => {
               if (error) throw error;
               if (data?.error) throw new Error(data.error);
 
-              // Increment coupon usage
+              // تحديث الكوبون والحفظ السري للعنوان
               if (appliedCoupon) {
                 await supabase.from('coupons').update({ used_count: (appliedCoupon.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
               }
-              
-              // Save address for next time (silently)
               saveAddressMutation.mutate(undefined, { onSuccess: () => {}, onError: () => {} });
+              
               clearCart();
               toast.success(t('paymentSuccess'));
               navigate('/profile');
             } catch (err: any) {
               console.error('Complete call failed:', err);
               toast.error(err.message || t('error'));
-              setIsProcessing(false); // إيقاف علامة التحميل عند الخطأ
+              setIsProcessing(false);
             }
           },
           onCancel: () => { 
@@ -265,7 +272,7 @@ const Checkout = () => {
                     <MapPin className="h-5 w-5 text-primary" />{t('shippingInfo')}
                   </h2>
                   <Button
-                    type="button" // للحماية من السلوك الافتراضي
+                    type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => saveAddressMutation.mutate(undefined, { onSuccess: () => toast.success(isAr ? 'تم حفظ العنوان' : 'Address saved') })}
