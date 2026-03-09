@@ -26,7 +26,7 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-xl">
       <div className="container mx-auto flex items-center justify-between px-4 py-3">
         <Link to="/" className="flex items-center gap-2">
-          <HalalcoLogo className="h-9 w-9 text-primary" />
+          <HalalcoLogo className="h-12 w-12" />
           <span className="text-lg font-bold text-foreground">Halalco</span>
         </Link>
 
