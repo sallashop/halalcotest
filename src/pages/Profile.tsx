@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { User, Package, LogOut, MapPin, Phone, Calendar, ChevronDown, ChevronUp, ShoppingBag } from 'lucide-react';
+import { User, Package, LogOut, MapPin, Phone, Calendar, ChevronDown, ChevronUp, ShoppingBag, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,7 @@ const Profile = () => {
   const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const isAr = language === 'ar';
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login', { replace: true });
@@ -42,14 +43,36 @@ const Profile = () => {
     enabled: !!user?.id,
   });
 
+  // Get WhatsApp number from settings
+  const { data: whatsappNumber } = useQuery({
+    queryKey: ['whatsapp-setting'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'whatsapp_number')
+        .maybeSingle();
+      return data?.value || '';
+    },
+  });
+
   const orders = ordersData || [];
 
   if (!user) return null;
 
-  const memberSince = new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
+  const memberSince = new Date().toLocaleDateString(isAr ? 'ar-EG' : 'en-US', {
     year: 'numeric',
     month: 'long',
   });
+
+  const openWhatsApp = (orderId: string) => {
+    if (!whatsappNumber) return;
+    const cleanNum = whatsappNumber.replace(/[^0-9]/g, '');
+    const msg = encodeURIComponent(
+      isAr ? `مرحباً، أريد الاستفسار عن طلبي رقم #${orderId.slice(0, 8)}` : `Hi, I'd like to inquire about my order #${orderId.slice(0, 8)}`
+    );
+    window.open(`https://wa.me/${cleanNum}?text=${msg}`, '_blank');
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -67,13 +90,13 @@ const Profile = () => {
               <h2 className="font-bold text-foreground text-lg mb-1">{user.username}</h2>
               <p className="text-xs text-muted-foreground mb-4">
                 <Calendar className="inline h-3 w-3 me-1" />
-                {language === 'ar' ? `عضو منذ ${memberSince}` : `Member since ${memberSince}`}
+                {isAr ? `عضو منذ ${memberSince}` : `Member since ${memberSince}`}
               </p>
 
               <div className="text-sm text-muted-foreground mb-4 space-y-1">
                 <p>
                   <ShoppingBag className="inline h-3.5 w-3.5 me-1" />
-                  {orders.length} {language === 'ar' ? 'طلب' : 'orders'}
+                  {orders.length} {isAr ? 'طلب' : 'orders'}
                 </p>
               </div>
 
@@ -109,17 +132,7 @@ const Profile = () => {
                   <div className="text-center py-12">
                     <Package className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
                     <p className="text-muted-foreground text-sm">{t('noOrders')}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {language === 'ar'
-                        ? 'ابدأ التسوق الآن وستظهر طلباتك هنا'
-                        : 'Start shopping and your orders will appear here'}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-4"
-                      onClick={() => navigate('/products')}
-                    >
+                    <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/products')}>
                       {t('shopNow')}
                     </Button>
                   </div>
@@ -128,118 +141,71 @@ const Profile = () => {
                     {orders.map((order: any) => {
                       const isExpanded = expandedOrder === order.id;
                       return (
-                        <div
-                          key={order.id}
-                          className="rounded-xl border border-border/50 overflow-hidden transition-colors hover:border-border"
-                        >
-                          {/* Order header - clickable */}
+                        <div key={order.id} className="rounded-xl border border-border/50 overflow-hidden transition-colors hover:border-border">
                           <button
                             className="w-full p-4 text-start flex items-center justify-between"
                             onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
                           >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm font-semibold text-foreground">
-                                  #{order.id.slice(0, 8)}
-                                </p>
-                                <Badge className={statusColors[order.status] || ''}>
-                                  {t(order.status as any)}
-                                </Badge>
+                                <p className="text-sm font-semibold text-foreground">#{order.id.slice(0, 8)}</p>
+                                <Badge className={statusColors[order.status] || ''}>{t(order.status as any)}</Badge>
                               </div>
                               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                <span>
-                                  {new Date(order.created_at).toLocaleDateString(
-                                    language === 'ar' ? 'ar-EG' : 'en-US',
-                                    { year: 'numeric', month: 'short', day: 'numeric' }
-                                  )}
-                                </span>
-                                <span className="font-bold text-primary">
-                                  {order.total?.toFixed(4)} π
-                                </span>
-                                {order.items?.length > 0 && (
-                                  <span>
-                                    {order.items.length} {language === 'ar' ? 'منتج' : 'items'}
-                                  </span>
-                                )}
+                                <span>{new Date(order.created_at).toLocaleDateString(isAr ? 'ar-EG' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                <span className="font-bold text-primary">{order.total?.toFixed(4)} π</span>
                               </div>
                             </div>
-                            {isExpanded ? (
-                              <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                            )}
+                            {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
                           </button>
 
-                          {/* Expanded details */}
                           {isExpanded && (
                             <div className="border-t border-border/50 p-4 space-y-4 bg-muted/30">
-                              {/* Items */}
                               {order.items?.length > 0 && (
                                 <div>
-                                  <p className="text-xs font-semibold text-foreground mb-2">
-                                    {language === 'ar' ? 'المنتجات' : 'Products'}
-                                  </p>
+                                  <p className="text-xs font-semibold text-foreground mb-2">{isAr ? 'المنتجات' : 'Products'}</p>
                                   <div className="space-y-2">
                                     {order.items.map((item: any) => (
-                                      <div
-                                        key={item.id}
-                                        className="flex items-center justify-between text-sm"
-                                      >
+                                      <div key={item.id} className="flex items-center justify-between text-sm">
                                         <span className="text-muted-foreground">
-                                          {language === 'ar'
-                                            ? item.products?.name_ar
-                                            : item.products?.name_en}{' '}
-                                          <span className="text-xs">× {item.quantity}</span>
+                                          {isAr ? item.products?.name_ar : item.products?.name_en} <span className="text-xs">× {item.quantity}</span>
                                         </span>
-                                        <span className="font-medium text-foreground">
-                                          {Number(item.price).toFixed(4)} π
-                                        </span>
+                                        <span className="font-medium text-foreground">{Number(item.price).toFixed(4)} π</span>
                                       </div>
                                     ))}
                                   </div>
                                 </div>
                               )}
 
-                              {/* Shipping info */}
                               {(order.shipping_name || order.shipping_address) && (
                                 <div>
-                                  <p className="text-xs font-semibold text-foreground mb-2">
-                                    {t('shippingInfo')}
-                                  </p>
+                                  <p className="text-xs font-semibold text-foreground mb-2">{t('shippingInfo')}</p>
                                   <div className="text-xs text-muted-foreground space-y-1">
-                                    {order.shipping_name && (
-                                      <p>
-                                        <User className="inline h-3 w-3 me-1" />
-                                        {order.shipping_name}
-                                      </p>
-                                    )}
-                                    {order.shipping_phone && (
-                                      <p>
-                                        <Phone className="inline h-3 w-3 me-1" />
-                                        {order.shipping_phone}
-                                      </p>
-                                    )}
-                                    {order.shipping_address && (
-                                      <p>
-                                        <MapPin className="inline h-3 w-3 me-1" />
-                                        {order.shipping_address}
-                                        {order.shipping_city ? `, ${order.shipping_city}` : ''}
-                                      </p>
-                                    )}
-                                    {order.shipping_notes && (
-                                      <p className="italic">{order.shipping_notes}</p>
-                                    )}
+                                    {order.shipping_name && <p><User className="inline h-3 w-3 me-1" />{order.shipping_name}</p>}
+                                    {order.shipping_phone && <p><Phone className="inline h-3 w-3 me-1" />{order.shipping_phone}</p>}
+                                    {order.shipping_address && <p><MapPin className="inline h-3 w-3 me-1" />{order.shipping_address}{order.shipping_city ? `, ${order.shipping_city}` : ''}</p>}
+                                    {order.shipping_notes && <p className="italic">{order.shipping_notes}</p>}
                                   </div>
                                 </div>
                               )}
 
-                              {/* Pi price at order */}
                               {order.pi_price_at_order && (
                                 <p className="text-xs text-muted-foreground">
-                                  {language === 'ar'
-                                    ? `سعر Pi وقت الطلب: $${Number(order.pi_price_at_order).toFixed(4)}`
-                                    : `Pi price at order: $${Number(order.pi_price_at_order).toFixed(4)}`}
+                                  {isAr ? `سعر Pi وقت الطلب: $${Number(order.pi_price_at_order).toFixed(4)}` : `Pi price at order: $${Number(order.pi_price_at_order).toFixed(4)}`}
                                 </p>
+                              )}
+
+                              {/* WhatsApp Contact Button */}
+                              {whatsappNumber && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openWhatsApp(order.id)}
+                                  className="w-full border-primary/30 text-primary hover:bg-primary/5"
+                                >
+                                  <MessageCircle className="h-4 w-4 me-1" />
+                                  {isAr ? 'تواصل واتساب' : 'Contact via WhatsApp'}
+                                </Button>
                               )}
                             </div>
                           )}
