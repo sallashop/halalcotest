@@ -171,6 +171,8 @@ export type Database = {
           shipping_phone: string | null
           status: string
           total: number
+          tracking_number: string | null
+          tracking_receipt_url: string | null
           updated_at: string | null
           user_id: string
         }
@@ -187,6 +189,8 @@ export type Database = {
           shipping_phone?: string | null
           status?: string
           total?: number
+          tracking_number?: string | null
+          tracking_receipt_url?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -203,6 +207,8 @@ export type Database = {
           shipping_phone?: string | null
           status?: string
           total?: number
+          tracking_number?: string | null
+          tracking_receipt_url?: string | null
           updated_at?: string | null
           user_id?: string
         }
@@ -330,6 +336,7 @@ export type Database = {
           id: string
           is_admin: boolean | null
           pi_uid: string
+          role: string | null
           updated_at: string | null
           user_id: string
           username: string
@@ -340,6 +347,7 @@ export type Database = {
           id?: string
           is_admin?: boolean | null
           pi_uid: string
+          role?: string | null
           updated_at?: string | null
           user_id: string
           username: string
@@ -350,6 +358,7 @@ export type Database = {
           id?: string
           is_admin?: boolean | null
           pi_uid?: string
+          role?: string | null
           updated_at?: string | null
           user_id?: string
           username?: string
