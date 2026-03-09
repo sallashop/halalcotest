@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, MapPin, Phone, User as UserIcon, Truck } from 'lucide-react';
+import { CreditCard, MapPin, Phone, User as UserIcon, Truck, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import Footer from '@/components/layout/Footer';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import PriceDisplay, { usePiPrice, calcPiPrice } from '@/components/products/PriceDisplay';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface ShippingForm {
   name: string;
@@ -29,8 +29,11 @@ const Checkout = () => {
   const { user } = useAuth();
   const { items, total, clearCart } = useCart();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
   const [form, setForm] = useState<ShippingForm>({ name: '', phone: '', address: '', city: '', notes: '' });
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const isAr = language === 'ar';
 
   const { data: piPriceData } = usePiPrice();
@@ -44,15 +47,63 @@ const Checkout = () => {
     },
   });
 
+  // Load saved address
+  const { data: savedAddress } = useQuery({
+    queryKey: ['saved-address', user?.piUid],
+    queryFn: async () => {
+      if (!user?.piUid) return null;
+      const { data } = await supabase
+        .from('saved_addresses')
+        .select('*')
+        .eq('user_id', user.piUid)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user?.piUid,
+  });
+
+  // Auto-fill saved address
+  useEffect(() => {
+    if (savedAddress && !form.name && !form.phone) {
+      setForm({
+        name: savedAddress.name || '',
+        phone: savedAddress.phone || '',
+        address: savedAddress.address || '',
+        city: savedAddress.city || '',
+        notes: savedAddress.notes || '',
+      });
+    }
+  }, [savedAddress]);
+
+  const saveAddressMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.piUid) return;
+      const { error } = await supabase
+        .from('saved_addresses')
+        .upsert({
+          user_id: user.piUid,
+          name: form.name,
+          phone: form.phone,
+          address: form.address,
+          city: form.city,
+          notes: form.notes,
+        }, { onConflict: 'user_id' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-address'] });
+      toast.success(isAr ? 'تم حفظ العنوان' : 'Address saved');
+    },
+  });
+
   const updateField = (field: keyof ShippingForm, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
   const getName = (p: typeof items[0]['product']) => language === 'ar' ? p.name_ar : p.name_en;
 
-  // Calculate real total with dynamic pricing and shipping
   const piPrice = piPriceData?.price || null;
-  
+
   const getItemPiPrice = (item: typeof items[0]) => {
     const priceType = (item.product as any).price_type || 'fixed';
     const priceUsd = (item.product as any).price_usd || 0;
@@ -69,7 +120,32 @@ const Checkout = () => {
 
   const subtotal = items.reduce((sum, i) => sum + getItemPiPrice(i) * i.quantity, 0);
   const totalShipping = items.reduce((sum, i) => sum + getShippingPi(i), 0);
-  const grandTotal = parseFloat((subtotal + totalShipping).toFixed(4));
+  const discount = appliedCoupon ? (subtotal * appliedCoupon.discount_percent / 100) : 0;
+  const grandTotal = parseFloat((subtotal - discount + totalShipping).toFixed(4));
+
+  const applyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('code', couponCode.trim().toUpperCase())
+      .eq('is_active', true)
+      .maybeSingle();
+    if (error || !data) {
+      toast.error(isAr ? 'كوبون غير صالح' : 'Invalid coupon');
+      return;
+    }
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      toast.error(isAr ? 'الكوبون منتهي الصلاحية' : 'Coupon expired');
+      return;
+    }
+    if (data.max_uses > 0 && data.used_count >= data.max_uses) {
+      toast.error(isAr ? 'الكوبون استنفد' : 'Coupon maxed out');
+      return;
+    }
+    setAppliedCoupon(data);
+    toast.success(isAr ? `تم تطبيق خصم ${data.discount_percent}%` : `${data.discount_percent}% discount applied`);
+  };
 
   const handlePayWithPi = async () => {
     if (!form.name || !form.phone || !form.address || !form.city) {
@@ -81,6 +157,10 @@ const Checkout = () => {
       return;
     }
     setIsProcessing(true);
+
+    // Save address for next time
+    saveAddressMutation.mutate();
+
     try {
       window.Pi.createPayment(
         {
@@ -95,6 +175,8 @@ const Checkout = () => {
             shipping: form,
             userId: user?.id,
             pi_price_at_order: piPrice,
+            coupon_code: appliedCoupon?.code || null,
+            discount_percent: appliedCoupon?.discount_percent || 0,
           },
         },
         {
@@ -113,32 +195,25 @@ const Checkout = () => {
                   pi_price_at_order: piPrice,
                 },
               });
-              if (error) {
-                console.error('Approve error:', error);
-                toast.error(t('error'));
-              }
-            } catch (err) {
-              console.error('Approve call failed:', err);
-              toast.error(t('error'));
-            }
+              if (error) { console.error('Approve error:', error); toast.error(t('error')); }
+            } catch (err) { console.error('Approve call failed:', err); toast.error(t('error')); }
           },
           onReadyForServerCompletion: async (paymentId, txid) => {
             try {
               const { error } = await supabase.functions.invoke('pi-complete', {
                 body: { paymentId, txid },
               });
-              if (error) {
-                console.error('Complete error:', error);
-                toast.error(t('error'));
-              } else {
+              if (error) { console.error('Complete error:', error); toast.error(t('error')); }
+              else {
+                // Increment coupon usage
+                if (appliedCoupon) {
+                  await supabase.from('coupons').update({ used_count: (appliedCoupon.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
+                }
                 clearCart();
                 toast.success(t('paymentSuccess'));
                 navigate('/profile');
               }
-            } catch (err) {
-              console.error('Complete call failed:', err);
-              toast.error(t('error'));
-            }
+            } catch (err) { console.error('Complete call failed:', err); toast.error(t('error')); }
           },
           onCancel: () => { setIsProcessing(false); toast.error(isAr ? 'تم إلغاء الدفع' : 'Payment cancelled'); },
           onError: () => { setIsProcessing(false); toast.error(t('error')); },
@@ -158,9 +233,21 @@ const Checkout = () => {
           <div className="lg:col-span-2">
             <Card className="border-border/50 bg-card">
               <CardContent className="p-6">
-                <h2 className="font-bold text-foreground mb-4 flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" />{t('shippingInfo')}
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-foreground flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-primary" />{t('shippingInfo')}
+                  </h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => saveAddressMutation.mutate()}
+                    disabled={saveAddressMutation.isPending || !form.name}
+                    className="text-xs text-primary"
+                  >
+                    <Save className="h-3 w-3 me-1" />
+                    {isAr ? 'حفظ العنوان' : 'Save Address'}
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm text-foreground">{t('name')} *</Label>
@@ -210,6 +297,33 @@ const Checkout = () => {
                     <span>{totalShipping.toFixed(4)} π</span>
                   </div>
                 )}
+
+                {/* Coupon */}
+                <div className="border-t border-border pt-3 mb-3">
+                  <Label className="text-xs text-muted-foreground mb-1 block">{isAr ? 'كوبون الخصم' : 'Coupon Code'}</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={couponCode}
+                      onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                      placeholder={isAr ? 'أدخل الكوبون' : 'Enter code'}
+                      className="bg-background border-border text-sm h-9"
+                      disabled={!!appliedCoupon}
+                    />
+                    {appliedCoupon ? (
+                      <Button size="sm" variant="outline" onClick={() => { setAppliedCoupon(null); setCouponCode(''); }} className="h-9 text-xs shrink-0">
+                        {isAr ? 'إزالة' : 'Remove'}
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={applyCoupon} className="h-9 text-xs bg-primary text-primary-foreground shrink-0">
+                        {isAr ? 'تطبيق' : 'Apply'}
+                      </Button>
+                    )}
+                  </div>
+                  {appliedCoupon && (
+                    <p className="text-xs text-primary mt-1">✓ {isAr ? `خصم ${appliedCoupon.discount_percent}%` : `${appliedCoupon.discount_percent}% off`} (-{discount.toFixed(4)} π)</p>
+                  )}
+                </div>
+
                 <div className="border-t border-border pt-3 flex justify-between items-center mb-6">
                   <span className="font-bold text-foreground">{t('total')}</span>
                   <span className="font-bold text-primary text-lg">{grandTotal.toFixed(4)} π</span>
