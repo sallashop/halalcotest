@@ -31,6 +31,7 @@ const Footer = () => {
               <Link to="/about" className="text-sm text-muted-foreground hover:text-primary transition-colors">{isAr ? 'من نحن' : 'About Us'}</Link>
               <Link to="/privacy" className="text-sm text-muted-foreground hover:text-primary transition-colors">{isAr ? 'سياسة الخصوصية' : 'Privacy Policy'}</Link>
               <Link to="/terms" className="text-sm text-muted-foreground hover:text-primary transition-colors">{isAr ? 'شروط الاستخدام' : 'Terms of Use'}</Link>
+              <Link to="/return-policy" className="text-sm text-muted-foreground hover:text-primary transition-colors">{isAr ? 'سياسة الإرجاع' : 'Return Policy'}</Link>
             </div>
           </div>
           <div>
