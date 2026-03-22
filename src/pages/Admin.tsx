@@ -81,6 +81,9 @@ const Admin = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isAr = language === 'ar';
+  const userRole = user?.role || (user?.isAdmin ? 'admin' : 'user');
+  const isModerator = userRole === 'moderator';
+  const isAdmin = userRole === 'admin' || user?.isAdmin;
 
   const [productDialog, setProductDialog] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Tables<'products'> | null>(null);
@@ -502,17 +505,17 @@ const Admin = () => {
           <div className="overflow-x-auto mb-6 -mx-4 px-4">
             <TabsList className="bg-muted inline-flex w-auto min-w-full sm:min-w-0 gap-1">
               <TabsTrigger value="products" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageProducts')}</TabsTrigger>
-              <TabsTrigger value="categories" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageCategories')}</TabsTrigger>
-              <TabsTrigger value="shipping" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الشحن' : 'Shipping'}</TabsTrigger>
+              {isAdmin && <TabsTrigger value="categories" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageCategories')}</TabsTrigger>}
+              {isAdmin && <TabsTrigger value="shipping" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الشحن' : 'Shipping'}</TabsTrigger>}
               <TabsTrigger value="orders" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{t('manageOrders')}</TabsTrigger>
-              <TabsTrigger value="reports" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">
+              {isAdmin && <TabsTrigger value="reports" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">
                 <BarChart3 className="h-4 w-4 me-1" />{isAr ? 'التقارير' : 'Reports'}
-              </TabsTrigger>
-              <TabsTrigger value="coupons" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الكوبونات' : 'Coupons'}</TabsTrigger>
-              <TabsTrigger value="team" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">
+              </TabsTrigger>}
+              {isAdmin && <TabsTrigger value="coupons" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الكوبونات' : 'Coupons'}</TabsTrigger>}
+              {isAdmin && <TabsTrigger value="team" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">
                 <Users className="h-4 w-4 me-1" />{isAr ? 'الفريق' : 'Team'}
-              </TabsTrigger>
-              <TabsTrigger value="settings" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الإعدادات' : 'Settings'}</TabsTrigger>
+              </TabsTrigger>}
+              {isAdmin && <TabsTrigger value="settings" className="whitespace-nowrap text-xs sm:text-sm px-3 sm:px-4">{isAr ? 'الإعدادات' : 'Settings'}</TabsTrigger>}
             </TabsList>
           </div>
 
@@ -893,7 +896,14 @@ const Admin = () => {
             </div>
             <div>
               <Label className="text-xs">{isAr ? 'الحد الأقصى للكمية' : 'Max Quantity'}</Label>
-              <Input type="number" value={form.max_quantity} onChange={e => setForm(f => ({ ...f, max_quantity: parseInt(e.target.value) || 1 }))} className="mt-1" min={1} />
+              <Input type="number" value={form.max_quantity || ''} onChange={e => {
+                const val = e.target.value;
+                if (val === '') { setForm(f => ({ ...f, max_quantity: 0 })); return; }
+                const num = form.unit_type === 'weight' ? parseFloat(val) : parseInt(val);
+                if (!isNaN(num)) setForm(f => ({ ...f, max_quantity: num }));
+              }} onBlur={() => {
+                if (!form.max_quantity) setForm(f => ({ ...f, max_quantity: 1 }));
+              }} className="mt-1" min={1} step={form.unit_type === 'weight' ? '0.5' : '1'} />
             </div>
             <div className="flex items-center gap-2 sm:col-span-2">
               <Switch checked={form.in_stock} onCheckedChange={v => setForm(f => ({ ...f, in_stock: v }))} />
