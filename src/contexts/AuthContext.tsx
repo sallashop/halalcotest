@@ -31,6 +31,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: () => Promise<boolean>;
   logout: () => void;
+  refreshToken: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,6 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const auth = await Promise.race([authPromise, timeoutPromise]);
       // Upsert profile in database
       let isAdmin = false;
+      let role = 'user';
       try {
         const { error: upsertError } = await supabase.from('profiles').upsert({
           user_id: auth.user.uid,
@@ -69,14 +71,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }, { onConflict: 'pi_uid' });
         if (upsertError) console.error('Profile upsert error:', upsertError);
 
-        // Fetch profile to get admin status
+        // Fetch profile to get admin status and role
         const { data: profile } = await supabase
           .from('profiles')
-          .select('is_admin, balance')
+          .select('is_admin, balance, role')
           .eq('pi_uid', auth.user.uid)
           .single();
         if (profile) {
           isAdmin = profile.is_admin ?? false;
+          role = profile.role || 'user';
         }
       } catch (e) {
         console.error('Profile error:', e);
@@ -88,7 +91,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         piUid: auth.user.uid,
         balance: 0,
         accessToken: auth.accessToken,
-        isAdmin,
+        isAdmin: isAdmin || role === 'admin',
+        role,
       };
       setUser(newUser);
       localStorage.setItem('gh_user', JSON.stringify(newUser));
@@ -113,8 +117,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     toast.success(t('logout'));
   }, [t]);
 
+  // Silent token refresh - re-authenticates with Pi SDK without UI feedback
+  const refreshToken = useCallback(async (): Promise<boolean> => {
+    if (!window.Pi) return false;
+    try {
+      const auth = await window.Pi.authenticate(
+        ['username', 'payments'],
+        (payment) => console.log('Incomplete payment:', payment)
+      );
+      if (user) {
+        const updatedUser = { ...user, accessToken: auth.accessToken };
+        setUser(updatedUser);
+        localStorage.setItem('gh_user', JSON.stringify(updatedUser));
+      }
+      return true;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      return false;
+    }
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout, refreshToken }}>
       {children}
     </AuthContext.Provider>
   );
