@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { cn } from '@/lib/utils';
-import { PiAmountDisplay } from '@/components/common/PiAmountDisplay';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // مكون تنسيق السعر
 const PriceFormatter = ({ value, className = "" }: { value: number, className?: string }) => {
@@ -30,13 +30,15 @@ const PriceFormatter = ({ value, className = "" }: { value: number, className?: 
   );
 };
 
-// مكون التحكم في الكمية - Soft UI & Borderless
+// مكون التحكم في الكمية - Soft UI & Borderless مع دعم الوزن
 const QuantityControl = ({ 
   quantity, 
-  onUpdate 
+  onUpdate,
+  isWeight = false 
 }: { 
   quantity: number; 
-  onUpdate: (newQty: number) => void 
+  onUpdate: (newQty: number) => void;
+  isWeight?: boolean;
 }) => {
   const [localValue, setLocalValue] = useState(quantity.toString());
 
@@ -44,20 +46,40 @@ const QuantityControl = ({
     setLocalValue(quantity.toString());
   }, [quantity]);
 
+  const step = isWeight ? 0.5 : 1;
+  const minVal = isWeight ? 0.5 : 1;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setLocalValue(val); 
 
-    const newQty = parseInt(val);
-    if (!isNaN(newQty) && newQty > 0) {
-      onUpdate(newQty);
+    // السماح للمستخدم بتفريغ الحقل مؤقتاً أثناء الكتابة
+    if (val === '') return;
+
+    const newQty = isWeight ? parseFloat(val) : parseInt(val);
+    if (!isNaN(newQty) && newQty >= minVal) {
+      onUpdate(isWeight ? Math.round(newQty * 10) / 10 : newQty);
     }
   };
 
   const handleBlur = () => {
-    if (localValue === '' || parseInt(localValue) <= 0) {
+    const currentNum = isWeight ? parseFloat(localValue) : parseInt(localValue);
+    if (localValue === '' || isNaN(currentNum) || currentNum < minVal) {
       setLocalValue(quantity.toString());
+      onUpdate(quantity);
     }
+  };
+
+  const handleDecrement = () => {
+    const newQty = quantity - step;
+    if (newQty >= minVal) {
+      onUpdate(isWeight ? Math.round(newQty * 10) / 10 : newQty);
+    }
+  };
+
+  const handleIncrement = () => {
+    const newQty = quantity + step;
+    onUpdate(isWeight ? Math.round(newQty * 10) / 10 : newQty);
   };
 
   return (
@@ -66,14 +88,16 @@ const QuantityControl = ({
         size="icon"
         variant="ghost"
         className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-background shadow-sm hover:bg-background/80 hover:shadow text-muted-foreground hover:text-destructive transition-all border-0"
-        onClick={() => onUpdate(quantity - 1)}
+        onClick={handleDecrement}
+        disabled={quantity <= minVal}
       >
         <Minus className="h-3 w-3 sm:h-4 sm:w-4" strokeWidth={2.5} />
       </Button>
 
       <Input 
         type="number" 
-        min="1"
+        min={minVal}
+        step={step}
         value={localValue}
         onChange={handleChange}
         onBlur={handleBlur} 
@@ -84,7 +108,7 @@ const QuantityControl = ({
         size="icon"
         variant="ghost"
         className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-background shadow-sm hover:bg-background/80 hover:shadow text-muted-foreground hover:text-primary transition-all border-0"
-        onClick={() => onUpdate(quantity + 1)}
+        onClick={handleIncrement}
       >
         <Plus className="h-3 w-3 sm:h-4 sm:w-4" strokeWidth={2.5} />
       </Button>
@@ -147,67 +171,74 @@ const Cart = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           
-          {/* Cart Items */}
+          {/* Cart Items with AnimatePresence */}
           <div className="lg:col-span-2 space-y-4">
-            {items.map((item, index) => (
-              <div 
-                key={item.product.id} 
-                className="animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <Card className="overflow-hidden border-0 shadow-sm bg-card hover:bg-muted/20 transition-colors duration-300 rounded-[1.5rem]">
-                  <CardContent className="flex gap-4 p-4 sm:p-5">
-                    
-                    <div className="relative shrink-0">
-                      <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-[1rem] overflow-hidden bg-background shadow-inner">
-                        <img 
-                          src={item.product.image_url || '/placeholder.svg'} 
-                          alt={getName(item.product)} 
-                          className="h-full w-full object-cover transition-transform duration-300 hover:scale-105" 
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-1 flex-col justify-between min-w-0 py-1">
-                      <div className="text-start">
-                        <h3 className="font-bold text-sm sm:text-base text-foreground/90 truncate">{getName(item.product)}</h3>
-                        <div className="flex items-center gap-1.5 mt-1 text-xs font-bold text-muted-foreground bg-muted/40 w-fit px-2 py-0.5 rounded-lg">
-                          <span dir="ltr">{item.product.price} Pi</span>
-                          <span>/ {getUnit(item.product)}</span>
+            <AnimatePresence mode="popLayout">
+              {items.map((item, index) => (
+                <motion.div 
+                  key={item.product.id} 
+                  layout
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  exit={{ opacity: 0, x: -50, scale: 0.95 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                >
+                  <Card className="overflow-hidden border-0 shadow-[0_2px_15px_rgb(0,0,0,0.03)] bg-card hover:bg-muted/20 transition-colors duration-300 rounded-[1.5rem]">
+                    <CardContent className="flex gap-4 p-4 sm:p-5">
+                      
+                      <div className="relative shrink-0">
+                        <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-[1rem] overflow-hidden bg-background shadow-inner">
+                          <img 
+                            src={item.product.image_url || '/placeholder.svg'} 
+                            alt={getName(item.product)} 
+                            className="h-full w-full object-cover transition-transform duration-300 hover:scale-105" 
+                          />
                         </div>
                       </div>
                       
-                      <div className="flex flex-wrap items-end justify-between gap-3 mt-3">
-                        <div className="scale-90 origin-bottom-right sm:scale-100 sm:origin-bottom-center rtl:origin-bottom-left">
-                           <QuantityControl 
-                              quantity={item.quantity} 
-                              onUpdate={(newQty) => updateQuantity(item.product.id, newQty)} 
-                           />
+                      <div className="flex flex-1 flex-col justify-between min-w-0 py-1">
+                        <div className="text-start">
+                          <h3 className="font-bold text-sm sm:text-base text-foreground/90 truncate">{getName(item.product)}</h3>
+                          <div className="flex items-center gap-1.5 mt-1 text-xs font-bold text-muted-foreground bg-muted/40 w-fit px-2 py-0.5 rounded-lg">
+                            <span dir="ltr">{item.product.price} Pi</span>
+                            <span>/ {getUnit(item.product)}</span>
+                          </div>
                         </div>
                         
-                        <div className="flex items-center gap-3">
-                          <div className="text-end font-black text-lg sm:text-xl text-primary" dir="ltr">
-                             <div className="flex items-baseline gap-1">
-                                <PriceFormatter value={item.product.price * item.quantity} />
-                                <span className="text-xs sm:text-sm text-primary/80">Pi</span>
-                             </div>
+                        <div className="flex flex-wrap items-end justify-between gap-3 mt-3">
+                          <div className="scale-90 origin-bottom-right sm:scale-100 sm:origin-bottom-center rtl:origin-bottom-left">
+                             {/* ✅ تمرير خاصية isWeight لتفعيل الكسور في الإدخال */}
+                             <QuantityControl 
+                                quantity={item.quantity} 
+                                onUpdate={(newQty) => updateQuantity(item.product.id, newQty)} 
+                                isWeight={item.product.unit_type === 'weight'}
+                             />
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-10 w-10 rounded-xl bg-destructive/5 text-destructive hover:bg-destructive hover:text-white transition-colors border-0 shadow-sm" 
-                            onClick={() => removeItem(item.product.id)}
-                          >
-                            <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
-                          </Button>
+                          
+                          <div className="flex items-center gap-3">
+                            <div className="text-end font-black text-lg sm:text-xl text-primary" dir="ltr">
+                               <div className="flex items-baseline gap-1">
+                                  <PriceFormatter value={item.product.price * item.quantity} />
+                                  <span className="text-xs sm:text-sm text-primary/80">Pi</span>
+                               </div>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-10 w-10 rounded-xl bg-destructive/5 text-destructive hover:bg-destructive hover:text-white transition-colors border-0 shadow-sm" 
+                              onClick={() => removeItem(item.product.id)}
+                            >
+                              <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                  </CardContent>
-                </Card>
-              </div>
-            ))}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
 
           {/* Order Summary */}
