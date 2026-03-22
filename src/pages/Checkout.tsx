@@ -26,7 +26,8 @@ interface ShippingForm {
 
 const Checkout = () => {
   const { t, language } = useLanguage();
-  const { user } = useAuth();
+  // ✅ إضافة refreshToken هنا من الـ AuthContext
+  const { user, refreshToken } = useAuth();
   const { items, total, clearCart } = useCart();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -90,7 +91,7 @@ const Checkout = () => {
         }, { onConflict: 'user_id' });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, _vars, context) => {
       queryClient.invalidateQueries({ queryKey: ['saved-address'] });
     },
   });
@@ -165,6 +166,11 @@ const Checkout = () => {
     setIsProcessing(true);
 
     try {
+      // ✅ Silently refresh Pi token before payment to avoid "scope" errors
+      if (typeof refreshToken === 'function') {
+        await refreshToken();
+      }
+
       const paymentData = {
         amount: grandTotal,
         memo: isAr ? 'طلب من Halalco' : 'Order from Halalco',
@@ -216,6 +222,7 @@ const Checkout = () => {
                 if (appliedCoupon) {
                   await supabase.from('coupons').update({ used_count: (appliedCoupon.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
                 }
+                // Save address for next time (silently)
                 saveAddressMutation.mutate(undefined, { onSuccess: () => {}, onError: () => {} });
                 clearCart();
                 toast.success(t('paymentSuccess'));
@@ -344,7 +351,7 @@ const Checkout = () => {
                   <span className="font-bold text-foreground">{t('total')}</span>
                   <span className="font-bold text-primary text-lg">{grandTotal.toFixed(4)} π</span>
                 </div>
-                <Button onClick={handlePayWithPi} disabled={isProcessing} className="w-full h-12 gradient-primary text-primary-foreground font-semibold text-base rounded-xl hover:opacity-90 transition-opacity">
+                <Button onClick={handlePayWithPi} disabled={isProcessing} className="w-full h-12 gradient-pi text-primary-foreground font-semibold text-base rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-primary/20 border-0">
                   {isProcessing ? <span className="animate-spin h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full" /> : <><CreditCard className="h-5 w-5 me-2" />{t('payWithPi')}</>}
                 </Button>
               </CardContent>
