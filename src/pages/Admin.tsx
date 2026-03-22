@@ -962,7 +962,7 @@ const Admin = () => {
             </div>
             <div>
               <Label className="text-xs">{isAr ? 'الترتيب' : 'Sort Order'}</Label>
-              <Input type="number" value={catForm.sort_order} onChange={e => setCatForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))} className="mt-1" />
+              <Input type="number" value={catForm.sort_order || ''} onChange={e => { const val = e.target.value; setCatForm(f => ({ ...f, sort_order: val === '' ? 0 : parseInt(val) || 0 })) }} onBlur={() => { if (!catForm.sort_order) setCatForm(f => ({ ...f, sort_order: 0 })) }} className="mt-1" />
             </div>
           </div>
           <DialogFooter className="gap-2">
@@ -999,7 +999,19 @@ const Admin = () => {
                   </TooltipContent>
                 </Tooltip>
               </Label>
-              <Input type="number" step="0.01" value={shipForm.price_usd} onChange={e => setShipForm(f => ({ ...f, price_usd: parseFloat(e.target.value) || 0 }))} className="mt-1" />
+              <Input 
+                type="number" 
+                step="0.01" 
+                value={shipForm.price_usd || ''} 
+                onChange={e => { 
+                  const val = e.target.value; 
+                  setShipForm(f => ({ ...f, price_usd: val === '' ? 0 : (parseFloat(val) || 0) })) 
+                }} 
+                onBlur={() => { 
+                  if (!shipForm.price_usd) setShipForm(f => ({ ...f, price_usd: 0 })) 
+                }} 
+                className="mt-1" 
+              />
               {shipForm.price_usd === 0 && <p className="text-xs text-primary mt-1">{isAr ? '✓ شحن مجاني' : '✓ Free shipping'}</p>}
             </div>
           </div>
@@ -1030,11 +1042,11 @@ const Admin = () => {
             </div>
             <div>
               <Label className="text-xs">{isAr ? 'نسبة الخصم (%)' : 'Discount %'}</Label>
-              <Input type="number" min={1} max={100} value={couponForm.discount_percent} onChange={e => setCouponForm(f => ({ ...f, discount_percent: parseFloat(e.target.value) || 0 }))} className="mt-1" />
+              <Input type="number" min={1} max={100} value={couponForm.discount_percent || ''} onChange={e => { const val = e.target.value; setCouponForm(f => ({ ...f, discount_percent: val === '' ? 0 : (parseFloat(val) || 0) })) }} onBlur={() => { if (!couponForm.discount_percent) setCouponForm(f => ({ ...f, discount_percent: 0 })) }} className="mt-1" />
             </div>
             <div>
               <Label className="text-xs">{isAr ? 'الحد الأقصى للاستخدام (0 = بلا حدود)' : 'Max uses (0 = unlimited)'}</Label>
-              <Input type="number" min={0} value={couponForm.max_uses} onChange={e => setCouponForm(f => ({ ...f, max_uses: parseInt(e.target.value) || 0 }))} className="mt-1" />
+              <Input type="number" min={0} value={couponForm.max_uses || ''} onChange={e => { const val = e.target.value; setCouponForm(f => ({ ...f, max_uses: val === '' ? 0 : (parseInt(val) || 0) })) }} onBlur={() => { if (!couponForm.max_uses) setCouponForm(f => ({ ...f, max_uses: 0 })) }} className="mt-1" />
             </div>
             <div>
               <Label className="text-xs">{isAr ? 'الوصف (عربي)' : 'Description (AR)'}</Label>
