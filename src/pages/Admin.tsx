@@ -794,7 +794,7 @@ const Admin = () => {
             {form.price_type === 'fixed' ? (
               <div className="sm:col-span-2">
                 <Label className="text-xs">{t('productPrice')} (π)</Label>
-                <Input type="number" step="0.0001" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="mt-1" />
+                <Input type="number" step="0.0001" value={form.price || ''} onChange={e => { const val = e.target.value; setForm(f => ({ ...f, price: val === '' ? 0 : (parseFloat(val) || 0) })); }} onBlur={() => { if (!form.price) setForm(f => ({ ...f, price: 0 })); }} className="mt-1" />
               </div>
             ) : (
               <div className="sm:col-span-2">
@@ -811,7 +811,7 @@ const Admin = () => {
                     </TooltipContent>
                   </Tooltip>
                 </Label>
-                <Input type="number" step="0.01" value={form.price_usd} onChange={e => setForm(f => ({ ...f, price_usd: parseFloat(e.target.value) || 0 }))} className="mt-1" placeholder="e.g. 5.00" />
+                <Input type="number" step="0.01" value={form.price_usd || ''} onChange={e => { const val = e.target.value; setForm(f => ({ ...f, price_usd: val === '' ? 0 : (parseFloat(val) || 0) })); }} onBlur={() => { if (!form.price_usd) setForm(f => ({ ...f, price_usd: 0 })); }} className="mt-1" placeholder="e.g. 5.00" />
                 <p className="text-xs text-muted-foreground mt-1">
                   {isAr ? 'السعر المعروض = تكلفة الدولار ÷ سعر Pi الحالي' : 'Displayed price = USD cost ÷ current Pi price'}
                 </p>
