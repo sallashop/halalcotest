@@ -186,16 +186,40 @@ const ProductDetails = () => {
             <div className="flex items-center gap-4 mt-auto">
               <div className="flex items-center border border-border rounded-xl overflow-hidden" dir="ltr">
                 <button
-                  onClick={() => setQty(q => Math.max(1, q - 1))}
+                  onClick={() => setQty(q => {
+                    const step = unitType === 'weight' ? 0.5 : 1;
+                    return Math.max(step, Math.round((q - step) * 10) / 10);
+                  })}
                   className="h-10 w-10 flex items-center justify-center hover:bg-muted transition-colors"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
-                <span className="h-10 w-12 flex items-center justify-center text-sm font-semibold text-foreground border-x border-border">
-                  {qty}
-                </span>
+                <input
+                  type="number"
+                  value={qty || ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '') { setQty(0); return; }
+                    const num = parseFloat(val);
+                    if (!isNaN(num) && num >= 0 && num <= maxQty) {
+                      setQty(unitType === 'weight' ? Math.round(num * 10) / 10 : Math.floor(num));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!qty || qty <= 0) {
+                      setQty(unitType === 'weight' ? 0.5 : 1);
+                    }
+                  }}
+                  step={unitType === 'weight' ? '0.5' : '1'}
+                  min={unitType === 'weight' ? '0.5' : '1'}
+                  max={maxQty}
+                  className="h-10 w-14 text-center text-sm font-semibold text-foreground border-x border-border bg-transparent outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
                 <button
-                  onClick={() => setQty(q => Math.min(maxQty, q + 1))}
+                  onClick={() => setQty(q => {
+                    const step = unitType === 'weight' ? 0.5 : 1;
+                    return Math.min(maxQty, Math.round((q + step) * 10) / 10);
+                  })}
                   className="h-10 w-10 flex items-center justify-center hover:bg-muted transition-colors"
                 >
                   <Plus className="h-4 w-4" />
