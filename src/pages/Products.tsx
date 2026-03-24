@@ -46,7 +46,7 @@ const Products = () => {
 
   const filtered = useMemo(() => {
     return products.filter(p => {
-      const matchCategory = activeCategory === 'all' || p.category === activeCategory;
+      const matchCategory = activeCategory === 'all' || p.category.toLowerCase() === activeCategory.toLowerCase();
       const nameField = language === 'ar' ? p.name_ar : p.name_en;
       const descField = language === 'ar' ? (p.description_ar || '') : (p.description_en || '');
       const matchSearch = !search || nameField.toLowerCase().includes(search.toLowerCase()) || descField.toLowerCase().includes(search.toLowerCase());
