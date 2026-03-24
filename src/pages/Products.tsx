@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,10 @@ const Products = () => {
   const categoryFromUrl = searchParams.get('category') || 'all';
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState(categoryFromUrl);
+
+  useEffect(() => {
+    setActiveCategory(categoryFromUrl);
+  }, [categoryFromUrl]);
 
   const { data: products = [] } = useQuery({
     queryKey: ['products'],
