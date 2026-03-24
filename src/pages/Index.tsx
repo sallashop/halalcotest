@@ -196,7 +196,7 @@ const Index = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 * i }}
               >
-                <Link to={`/products?category=${cat.name_en.toLowerCase()}`}>
+                <Link to={`/products?category=${encodeURIComponent(cat.name_en.trim().toLowerCase())}`}>
                   <div className="relative group rounded-2xl overflow-hidden aspect-square card-shadow border border-border/50 cursor-pointer">
                     <img
                       src={cat.image_url || '/placeholder.svg'}
