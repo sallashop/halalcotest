@@ -11,8 +11,8 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import PriceDisplay, { usePiPrice, calcPiPrice } from '@/components/products/PriceDisplay';
 
-// مكون تنسيق السعر
 const PriceFormatter = ({ value, className = "" }: { value: number, className?: string }) => {
   const formatted = value.toFixed(7);
   const [intPart, decPart] = formatted.split('.');
@@ -30,7 +30,6 @@ const PriceFormatter = ({ value, className = "" }: { value: number, className?: 
   );
 };
 
-// مكون التحكم في الكمية - Soft UI & Borderless مع دعم الوزن
 const QuantityControl = ({ 
   quantity, 
   onUpdate,
@@ -53,7 +52,6 @@ const QuantityControl = ({
     const val = e.target.value;
     setLocalValue(val); 
 
-    // السماح للمستخدم بتفريغ الحقل مؤقتاً أثناء الكتابة
     if (val === '') return;
 
     const newQty = isWeight ? parseFloat(val) : parseInt(val);
@@ -118,11 +116,18 @@ const QuantityControl = ({
 
 const Cart = () => {
   const { t, language } = useLanguage();
-  const { items, removeItem, updateQuantity, total } = useCart();
+  const { items, removeItem, updateQuantity } = useCart();
   const { isAuthenticated } = useAuth();
+  const { data: piPriceData } = usePiPrice();
 
   const getName = (p: typeof items[0]['product']) => language === 'ar' ? p.name_ar : p.name_en;
   const getUnit = (p: typeof items[0]['product']) => language === 'ar' ? (p.unit_ar || 'كيلو') : (p.unit_en || 'kg');
+
+  const getItemPrice = (p: typeof items[0]['product']) => {
+    return calcPiPrice(p.price_type, p.price, p.price_usd ?? 0, piPriceData?.price ?? null);
+  };
+
+  const calculatedTotal = items.reduce((sum, i) => sum + getItemPrice(i.product) * i.quantity, 0);
 
   if (items.length === 0) {
     return (
@@ -171,7 +176,6 @@ const Cart = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           
-          {/* Cart Items with AnimatePresence */}
           <div className="lg:col-span-2 space-y-4">
             <AnimatePresence mode="popLayout">
               {items.map((item, index) => (
@@ -200,14 +204,13 @@ const Cart = () => {
                         <div className="text-start">
                           <h3 className="font-bold text-sm sm:text-base text-foreground/90 truncate">{getName(item.product)}</h3>
                           <div className="flex items-center gap-1.5 mt-1 text-xs font-bold text-muted-foreground bg-muted/40 w-fit px-2 py-0.5 rounded-lg">
-                            <span dir="ltr">{item.product.price} Pi</span>
+                            <PriceDisplay priceType={item.product.price_type} priceFixed={item.product.price} priceUsd={item.product.price_usd ?? 0} />
                             <span>/ {getUnit(item.product)}</span>
                           </div>
                         </div>
                         
                         <div className="flex flex-wrap items-end justify-between gap-3 mt-3">
                           <div className="scale-90 origin-bottom-right sm:scale-100 sm:origin-bottom-center rtl:origin-bottom-left">
-                             {/* ✅ تمرير خاصية isWeight لتفعيل الكسور في الإدخال */}
                              <QuantityControl 
                                 quantity={item.quantity} 
                                 onUpdate={(newQty) => updateQuantity(item.product.id, newQty)} 
@@ -218,7 +221,7 @@ const Cart = () => {
                           <div className="flex items-center gap-3">
                             <div className="text-end font-black text-lg sm:text-xl text-primary" dir="ltr">
                                <div className="flex items-baseline gap-1">
-                                  <PriceFormatter value={item.product.price * item.quantity} />
+                                  <PriceFormatter value={getItemPrice(item.product) * item.quantity} />
                                   <span className="text-xs sm:text-sm text-primary/80">Pi</span>
                                </div>
                             </div>
@@ -241,7 +244,6 @@ const Cart = () => {
             </AnimatePresence>
           </div>
 
-          {/* Order Summary */}
           <div className="animate-in fade-in slide-in-from-right-8 duration-500 delay-300 fill-mode-both">
             <Card className="border-0 shadow-xl shadow-black/5 bg-card rounded-[2rem] sticky top-24 overflow-hidden">
               <div className="bg-muted/10 p-5 border-b border-border/10">
@@ -258,7 +260,7 @@ const Cart = () => {
                   {items.map(item => (
                     <div key={item.product.id} className="flex justify-between text-xs sm:text-sm font-bold text-muted-foreground">
                       <span className="truncate pr-4">{getName(item.product)} <span className="text-foreground">× {item.quantity}</span></span>
-                      <span className="shrink-0 text-foreground" dir="ltr">{(item.product.price * item.quantity).toFixed(4)} Pi</span>
+                      <span className="shrink-0 text-foreground" dir="ltr">{(getItemPrice(item.product) * item.quantity).toFixed(4)} Pi</span>
                     </div>
                   ))}
                 </div>
@@ -268,7 +270,7 @@ const Cart = () => {
                     <span className="text-base sm:text-lg font-black text-foreground">{t('total')}</span>
                     <div className="text-end" dir="ltr">
                       <div className="text-2xl sm:text-3xl font-black text-primary flex items-baseline gap-1">
-                         <PriceFormatter value={total} />
+                         <PriceFormatter value={calculatedTotal} />
                          <span className="text-sm sm:text-base text-primary/80">Pi</span>
                       </div>
                     </div>
