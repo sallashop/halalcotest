@@ -46,12 +46,29 @@ Deno.serve(async (req) => {
       const orderIds = orders.map((o: any) => o.id);
       const { data: items } = await supabaseAdmin
         .from("order_items")
-        .select("*, products(*)")
+        .select("*")
         .in("order_id", orderIds);
 
-      // Attach items to orders
+      // Get unique product IDs and fetch product details
+      const productIds = [...new Set((items || []).map((i: any) => i.product_id))];
+      let productsMap: Record<string, any> = {};
+      if (productIds.length > 0) {
+        const { data: prods } = await supabaseAdmin
+          .from("products")
+          .select("*")
+          .in("id", productIds);
+        for (const p of prods || []) {
+          productsMap[p.id] = p;
+        }
+      }
+
+      // Attach items with product details to orders
       for (const order of orders) {
-        (order as any).items = items?.filter((i: any) => i.order_id === order.id) || [];
+        const orderItemsList = (items || []).filter((i: any) => i.order_id === order.id);
+        (order as any).items = orderItemsList.map((i: any) => ({
+          ...i,
+          products: productsMap[i.product_id] || null,
+        }));
       }
     }
 
