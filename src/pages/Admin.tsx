@@ -645,6 +645,29 @@ const Admin = () => {
                           </SelectContent>
                         </Select>
                       </div>
+                      
+                      {/* Order Items */}
+                      {(() => {
+                        const items = orderItems.filter(i => i.order_id === order.id);
+                        if (items.length === 0) return null;
+                        return (
+                          <div className="mt-3 border-t border-border/50 pt-2">
+                            <p className="text-xs font-semibold text-foreground mb-1">{isAr ? 'المنتجات:' : 'Products:'}</p>
+                            <div className="space-y-1">
+                              {items.map(item => {
+                                const prod = products.find(p => p.id === item.product_id);
+                                return (
+                                  <div key={item.id} className="flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>{isAr ? prod?.name_ar : prod?.name_en || item.product_id.slice(0, 8)} × {item.quantity}</span>
+                                    <span className="font-medium text-foreground">{Number(item.price).toFixed(4)} π</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Tracking info */}
                       {(order as any).tracking_number && (
                         <div className="mt-2 p-2 rounded-lg bg-muted/50 border border-border/50">
